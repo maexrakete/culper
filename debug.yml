@@ -1,0 +1,20 @@
+version: '2'
+
+services:
+  some_container:
+    image: ubuntu
+    command: sleep infinity
+    networks:
+      - web
+  whoami:
+    image: emilevauge/whoami
+    network_mode: "service:some_container"
+    labels:
+      - "traefik.backend=whoami"
+      - "traefik.port=80"
+      - "traefik.frontend.rule=Host:whoami.docker.localhost"
+
+networks:
+  web:
+    external:
+      name: traefik_webgateway
