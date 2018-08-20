@@ -5,6 +5,7 @@ extern crate rand;
 extern crate serde_yaml;
 
 use clap::{App, Arg, SubCommand};
+use std::io::{stdin,stdout,Write};
 // use base64::{decode, encode};
 // use rand::prelude::*;
 // use rand::OsRng;
@@ -27,9 +28,20 @@ fn main() {
 
   match matches.subcommand() {
     ("encrypt", Some(sub)) => {
-      let vals: Vec<&str> = sub.values_of("value").unwrap().collect();
-      for s in vals.into_iter() {
-        println!("{}", s);
+      print!("Enter password for encryption: ");
+      let _ = stdout().flush();
+
+      let mut buffer = String::new();
+      match stdin().read_line(&mut buffer) {
+        Ok(_) => {
+          println!("{}", buffer);
+
+          let vals: Vec<&str> = sub.values_of("value").unwrap().collect();
+          for s in vals.into_iter() {
+            println!("{}", s);
+          };
+        },
+        Err(_) => println!("lol, fuck")
       };
     },
     _ => println!("lol")
