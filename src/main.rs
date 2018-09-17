@@ -84,7 +84,7 @@ fn main() {
                   match Vault::parse(val) {
                     Ok(d) => {
                       println!("{:?}", d);
-                      let val = d.unseal(&password).expect("Could not decrypt Vault.");
+                      let val = d.unseal(&password).expect("Could not decrypt Vault:");
                       println!("Got value: {}", val.as_str())
                     },
                     _ => ()

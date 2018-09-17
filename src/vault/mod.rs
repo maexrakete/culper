@@ -2,6 +2,7 @@ use aes;
 use base64::{decode, encode};
 use rand::prelude::*;
 use rand::distributions::Alphanumeric;
+use rand::{OsRng};
 use crypto;
 
 #[derive(Debug)]
@@ -73,27 +74,36 @@ impl Vault {
     }
 
     pub fn seal(&self, password: &String) -> Result<Vault, ()> {
-      let iv: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
-      match aes::encrypt(self.pass.as_bytes(), password.as_bytes(), iv.as_bytes()) {
-          Ok(payload) => Ok(Self::new(
+      let mut iv: [u8; 16] = [0; 16];
+      let mut rng = OsRng::new().ok().unwrap();
+      rng.fill_bytes(&mut iv);
+      println!("Password: {:?} \niv: {:?} \n\n", password.as_bytes(), iv);
+      match aes::encrypt(self.pass.as_bytes(), password.as_bytes(), &iv) {
+        Ok(payload) => {
+          Ok(Self::new(
               encode(payload.as_slice()),
               EncryptionFormat::CKM_AES_CBC_PAD,
-              Some(iv),
+              Some(encode(&iv)),
               true
-          )),
+          ))},
           Err(e) => Err(()),
       }
     }
 
   pub fn unseal(self, password: &String) -> Result<Vault, crypto::symmetriccipher::SymmetricCipherError> {
     let payload_bytes = decode(&self.pass).expect("Sometinh wrong with the pass");
-    match aes::decrypt(payload_bytes.as_slice(), password.as_bytes(), self.salt.unwrap().as_bytes()) {
-      Ok(payload) => Ok(Self::new(
-        String::from_utf8(payload).expect("FUCKSHIT"),
-        EncryptionFormat::CKM_AES_CBC_PAD,
-        None,
-        false
-      )),
+    let iv_bytes = decode(&self.salt.unwrap()).expect("Something wrong with the salt.");
+
+    println!("Password: {:?} \niv: {:?}", password.as_bytes(), iv_bytes);
+    match aes::decrypt(payload_bytes.as_slice(), password.as_bytes(), iv_bytes.as_slice()) {
+      Ok(payload) => {
+          Ok(Self::new(
+              String::from_utf8(payload).expect("String conversion did not work"),
+              EncryptionFormat::CKM_AES_CBC_PAD,
+              None,
+              false
+          ))
+      },
       Err(e) => Err(e)
     }
   }
@@ -119,9 +129,10 @@ mod tests {
       let vault = Vault::new_unsealed(secret.to_owned());
 
       let sealed = vault.seal(&password).unwrap();
-      let unsealed = sealed.unseal(&password).unwrap();
+      let unsealed = sealed.unseal(&password);
 
-      assert_eq!(unsealed.pass, secret.to_owned());
+      assert!(unsealed.is_ok());
+      assert_eq!(unsealed.unwrap().pass, secret.to_owned());
     }
 
     #[test]
@@ -131,7 +142,6 @@ mod tests {
       let vault = Vault::new_unsealed(secret.to_owned());
 
       let sealed = vault.seal(&password).unwrap().as_str();
-      println!("{}", sealed);
 
       let unsealed = Vault::parse(&sealed).unwrap().unseal(&password).unwrap();
 

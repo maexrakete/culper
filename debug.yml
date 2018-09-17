@@ -1,5 +1,5 @@
-version: '2'
-
+---
+version: "2"
 services:
   some_container:
     image: ubuntu
@@ -13,7 +13,7 @@ services:
       - "traefik.backend=whoami"
       - "traefik.port=80"
       - "traefik.frontend.rule=Host:whoami.docker.localhost"
-
+    test: "CULPER.AES_CBC_PAD.tVgnpDCLjyYX0YdOGMAl+w==.JmbLOvyxACNjWnk4lyghTw=="
 networks:
   web:
     external:
