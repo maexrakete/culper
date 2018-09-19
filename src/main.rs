@@ -6,7 +6,6 @@ extern crate serde_yaml;
 
 use base64::{decode, encode};
 use clap::{App, Arg, SubCommand};
-use vault::{Vault, EncryptionFormat};
 use rand::distributions::Alphanumeric;
 use rand::prelude::*;
 use std::fs::{File, OpenOptions};
@@ -14,6 +13,7 @@ use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 use std::path::Path;
 use std::str;
+use vault::{EncryptionFormat, Vault};
 
 fn main() {
     let matches = App::new("culper")
@@ -80,17 +80,16 @@ fn main() {
             let mut password = String::new();
 
             if stdin().read_line(&mut password).is_ok() {
-              let stuff = |val: &mut String| {
-                  match Vault::parse(val) {
+                let stuff = |val: &mut String| match Vault::parse(val) {
                     Ok(d) => {
-                      println!("{:?}", d);
-                      let val = d.unseal(password.to_owned()).expect("Could not decrypt Vault:");
-                      println!("Got value: {}", val.as_str())
-                    },
-                    _ => ()
-                  }
-              };
-              yaml::traverse_yml(&mut yml, &stuff);
+                        let val = d
+                            .unseal(password.to_owned())
+                            .expect("Could not decrypt Vault:");
+                        println!("Got value: {}", val.as_str())
+                    }
+                    _ => (),
+                };
+                yaml::traverse_yml(&mut yml, &stuff);
             }
         }
         _ => println!("nothing"), // clap handles this
@@ -109,19 +108,16 @@ fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
 
             let mut value = String::new();
             if stdin().read_line(&mut value).is_ok() {
-                let vault = make_vault(&value, password.to_owned()).expect("Could not build Vault.");
-                println!("{:?}", vault);
+                let vault =
+                    make_vault(&value, password.to_owned()).expect("Could not build Vault.");
                 yaml::replace_value(yml, s.split(".").collect(), vault.as_str());
             }
         }
     }
 }
 
-fn make_vault(
-    plain: &String,
-    pass: String,
-) -> Result<Vault, ()> {
-  Vault::new_unsealed(plain.to_owned()).seal(pass)
+fn make_vault(plain: &String, pass: String) -> Result<Vault, ()> {
+    Vault::new_unsealed(plain.to_owned()).seal(pass)
 }
 
 mod aes;

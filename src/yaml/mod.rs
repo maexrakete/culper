@@ -44,6 +44,6 @@ where
                 traverse_yml(&mut i.1, f);
             }
         }
-        _ => println!("Unsupported YAML Value. Skip."),
+        _ => (),
     };
 }
