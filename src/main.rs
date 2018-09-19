@@ -84,7 +84,7 @@ fn main() {
                   match Vault::parse(val) {
                     Ok(d) => {
                       println!("{:?}", d);
-                      let val = d.unseal(&password).expect("Could not decrypt Vault:");
+                      let val = d.unseal(password.to_owned()).expect("Could not decrypt Vault:");
                       println!("Got value: {}", val.as_str())
                     },
                     _ => ()
@@ -109,7 +109,7 @@ fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
 
             let mut value = String::new();
             if stdin().read_line(&mut value).is_ok() {
-                let vault = make_vault(&value, &password).expect("Could not build Vault.");
+                let vault = make_vault(&value, password.to_owned()).expect("Could not build Vault.");
                 println!("{:?}", vault);
                 yaml::replace_value(yml, s.split(".").collect(), vault.as_str());
             }
@@ -119,7 +119,7 @@ fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
 
 fn make_vault(
     plain: &String,
-    pass: &String,
+    pass: String,
 ) -> Result<Vault, ()> {
   Vault::new_unsealed(plain.to_owned()).seal(pass)
 }
