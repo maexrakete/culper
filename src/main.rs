@@ -4,16 +4,14 @@ extern crate crypto;
 extern crate rand;
 extern crate serde_yaml;
 
-use base64::{decode, encode};
 use clap::{App, Arg, SubCommand};
-use rand::distributions::Alphanumeric;
-use rand::prelude::*;
+use serde_yaml::Value;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 use std::path::Path;
 use std::str;
-use vault::{EncryptionFormat, Vault};
+use vault::Vault;
 
 fn main() {
     let matches = App::new("culper")
@@ -80,16 +78,18 @@ fn main() {
             let mut password = String::new();
 
             if stdin().read_line(&mut password).is_ok() {
-                let stuff = |val: &mut String| match Vault::parse(val) {
+                let replacefn = |val: &mut String, node: &mut Value| match Vault::parse(val) {
                     Ok(d) => {
                         let val = d
                             .unseal(password.to_owned())
                             .expect("Could not decrypt Vault:");
-                        println!("Got value: {}", val.as_str())
+
+                        println!("Got value: {}", val.as_str());
+                        node = &mut Value::String("newval".to_owned())
                     }
                     _ => (),
                 };
-                yaml::traverse_yml(&mut yml, &stuff);
+                yaml::traverse_yml(&mut yml, &replacefn);
             }
         }
         _ => println!("nothing"), // clap handles this

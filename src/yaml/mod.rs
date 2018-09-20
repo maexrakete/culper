@@ -35,10 +35,10 @@ pub fn replace_value(value: &mut Value, node_tree: Vec<&str>, replace_str: Strin
 
 pub fn traverse_yml<'a, F>(value: &'a mut Value, f: &F)
 where
-    F: Fn(&mut String),
+    F: Fn(&mut String, &mut Value),
 {
     match value {
-        Value::String(s) => f(s),
+        Value::String(s) => f(s, &mut value),
         Value::Mapping(m) => {
             for mut i in m.iter_mut() {
                 traverse_yml(&mut i.1, f);

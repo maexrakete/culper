@@ -18,10 +18,13 @@ impl EncryptionFormat {
 }
 
 #[derive(Debug)]
-pub enum VaultError {
+pub enum VaultCryptoError {
     UnsealCipherError,
     MissingSaltError,
 }
+
+#[derive(Debug)]
+pub struct VaultParseError;
 
 #[derive(Debug)]
 pub struct Vault {
@@ -64,7 +67,7 @@ impl Vault {
         );
     }
 
-    pub fn parse(value: &String) -> Result<Vault, ()> {
+    pub fn parse(value: &String) -> Result<Vault, VaultParseError> {
         let value_list: Vec<&str> = value.split('.').collect();
         match value_list.as_slice() {
             ["CULPER", _, "<NONE>", pass] => Ok(Self::new(
@@ -79,7 +82,7 @@ impl Vault {
                 Some(crypt_salt.to_string()),
                 true,
             )),
-            _ => Err(()),
+            _ => Err(VaultParseError),
         }
     }
 
@@ -90,24 +93,26 @@ impl Vault {
         crypted
     }
 
-    pub fn seal(&self, password: String) -> Result<Vault, ()> {
+    pub fn seal(
+        &self,
+        password: String,
+    ) -> Result<Vault, crypto::symmetriccipher::SymmetricCipherError> {
         let mut iv: [u8; 16] = [0; 16];
         let mut rng = OsRng::new().ok().unwrap();
         rng.fill_bytes(&mut iv);
 
         let derived_key = self.derive_key(password, &iv);
-        match aes::encrypt(self.pass.as_bytes(), derived_key.as_slice(), &iv) {
-            Ok(payload) => Ok(Self::new(
+        aes::encrypt(self.pass.as_bytes(), derived_key.as_slice(), &iv).and_then(|payload| {
+            Ok(Self::new(
                 encode(payload.as_slice()),
                 EncryptionFormat::CKM_AES_CBC_PAD,
                 Some(encode(&iv)),
                 true,
-            )),
-            Err(e) => Err(()),
-        }
+            ))
+        })
     }
 
-    pub fn unseal(self, password: String) -> Result<Vault, VaultError> {
+    pub fn unseal(self, password: String) -> Result<Vault, VaultCryptoError> {
         let payload_bytes = decode(&self.pass).expect("Something wrong with the pass");
         match self.salt {
             Some(ref s) => {
@@ -115,8 +120,8 @@ impl Vault {
                     password,
                     decode(s).expect("Could not decode base64 salt").as_slice(),
                 );
-                println!("{:?}", derived_key);
                 let iv_bytes = decode(&s).expect("Something wrong with the salt.");
+
                 match aes::decrypt(
                     payload_bytes.as_slice(),
                     derived_key.as_slice(),
@@ -128,10 +133,10 @@ impl Vault {
                         None,
                         false,
                     )),
-                    Err(_) => Err(VaultError::UnsealCipherError),
+                    Err(_) => Err(VaultCryptoError::UnsealCipherError),
                 }
             }
-            None => Err(VaultError::MissingSaltError),
+            None => Err(VaultCryptoError::MissingSaltError),
         }
     }
 }
