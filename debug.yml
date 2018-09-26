@@ -13,7 +13,7 @@ services:
       - "traefik.backend=whoami"
       - "traefik.port=80"
       - "traefik.frontend.rule=Host:whoami.docker.localhost"
-    network_doedel: "CULPER.AES_CBC_PAD.ZTx5f2laR79uDv8wDl9Quw==.Wy5EcGRJ2hh0Ogw5XwdLLQ=="
+    test: "CULPER.AES_CBC_PAD.wufNOUZa15fJvuwvobTHjA==.RVje99JJkYqnYB6vgq4rgS0uPkh+I3n950scM0LxZiU="
 networks:
   web:
     external:

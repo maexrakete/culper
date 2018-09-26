@@ -78,18 +78,18 @@ fn main() {
             let mut password = String::new();
 
             if stdin().read_line(&mut password).is_ok() {
-                let replacefn = |val: &mut String, node: &mut Value| match Vault::parse(val) {
+                let replacefn = |val: &mut String| match Vault::parse(val) {
                     Ok(d) => {
                         let val = d
                             .unseal(password.to_owned())
                             .expect("Could not decrypt Vault:");
 
-                        println!("Got value: {}", val.as_str());
-                        node = &mut Value::String("newval".to_owned())
+                        Some(val.pass.to_owned())
                     }
-                    _ => (),
+                    _ => None,
                 };
-                yaml::traverse_yml(&mut yml, &replacefn);
+                let uncrypted_yml = yaml::traverse_yml(&yml.as_mapping().unwrap(), &replacefn);
+                println!("{}", serde_yaml::to_string(&uncrypted_yml).unwrap())
             }
         }
         _ => println!("nothing"), // clap handles this
@@ -108,15 +108,19 @@ fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
 
             let mut value = String::new();
             if stdin().read_line(&mut value).is_ok() {
-                let vault =
-                    make_vault(&value, password.to_owned()).expect("Could not build Vault.");
+                let trimmed_value = value.trim_right();
+                let vault = make_vault(&trimmed_value.to_owned(), password.to_owned())
+                    .expect("Could not build Vault.");
                 yaml::replace_value(yml, s.split(".").collect(), vault.as_str());
             }
         }
     }
 }
 
-fn make_vault(plain: &String, pass: String) -> Result<Vault, ()> {
+fn make_vault(
+    plain: &String,
+    pass: String,
+) -> Result<Vault, crypto::symmetriccipher::SymmetricCipherError> {
     Vault::new_unsealed(plain.to_owned()).seal(pass)
 }
 

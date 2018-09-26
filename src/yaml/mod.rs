@@ -1,4 +1,4 @@
-use serde_yaml::Value;
+use serde_yaml::{Mapping, Value};
 
 pub fn find_node<'a>(value: &'a mut Value, node_tree: Vec<&str>) -> Result<&'a mut Value, String> {
     match node_tree.split_first() {
@@ -33,17 +33,33 @@ pub fn replace_value(value: &mut Value, node_tree: Vec<&str>, replace_str: Strin
     }
 }
 
-pub fn traverse_yml<'a, F>(value: &'a mut Value, f: &F)
+pub fn traverse_yml<'a, F>(value: &'a Mapping, f: &F) -> Mapping
 where
-    F: Fn(&mut String, &mut Value),
+    F: Fn(&mut String) -> Option<String>,
 {
-    match value {
-        Value::String(s) => f(s, &mut value),
-        Value::Mapping(m) => {
-            for mut i in m.iter_mut() {
-                traverse_yml(&mut i.1, f);
+    let mut new_yml: Mapping = Mapping::new();
+
+    for entry in value.into_iter() {
+        match entry {
+            (Value::String(key), Value::String(s)) => {
+                let new_value = f(&mut s.to_owned()).unwrap_or(s.to_owned());
+                new_yml.insert(Value::String(key.to_owned()), Value::String(new_value));
             }
-        }
-        _ => (),
-    };
+            (Value::String(key), Value::Mapping(map)) => {
+                let new_mapping = traverse_yml(&map, f);
+                new_yml.insert(Value::String(key.to_owned()), Value::Mapping(new_mapping));
+            }
+            (Value::String(key), Value::Sequence(seq)) => {
+                new_yml.insert(Value::String(key.to_owned()), Value::Sequence(seq.clone()));
+            }
+            (Value::String(key), Value::Number(num)) => {
+                new_yml.insert(Value::String(key.to_owned()), Value::Number(num.clone()));
+            }
+            (Value::String(key), Value::Bool(boolean)) => {
+                new_yml.insert(Value::String(key.to_owned()), Value::Bool(boolean.clone()));
+            }
+            _ => (),
+        };
+    }
+    new_yml
 }
