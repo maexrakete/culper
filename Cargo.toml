@@ -1,5 +1,6 @@
 [package]
 name = "culper"
+description = " A tool to embedd encrypted secrets in yaml files"
 version = "0.1.0"
 authors = ["Max Kiehnscherf <max.kiehnscherf@gmail.com>"]
 license = "GPL-3.0-or-later"
