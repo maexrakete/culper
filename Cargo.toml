@@ -1,7 +1,8 @@
 [package]
 name = "culper"
 version = "0.1.0"
-authors = ["Mäx <max.kiehnscherf@gmail.com>"]
+authors = ["Max Kiehnscherf <max.kiehnscherf@gmail.com>"]
+license = "GPL-3.0-or-later"
 
 [dependencies]
 serde = "1.0"

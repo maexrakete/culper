@@ -5,7 +5,6 @@ extern crate rand;
 extern crate serde_yaml;
 
 use clap::{App, Arg, SubCommand};
-use serde_yaml::Value;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
@@ -31,7 +30,7 @@ fn main() {
                     Arg::with_name("value")
                         .short("v")
                         .long("value")
-                        .help("Key value denotion of YAML-Path and value")
+                        .help("YAML path which should be encrypted")
                         .multiple(true)
                         .required(true)
                         .takes_value(true),
@@ -39,7 +38,7 @@ fn main() {
                     Arg::with_name("overwrite")
                         .short("o")
                         .long("overwrite")
-                        .help("Defines if input-file should be overwritten")
+                        .help("Overwrites input file")
                         .conflicts_with("file")
                         .takes_value(false),
                 ),
