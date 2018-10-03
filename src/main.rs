@@ -57,13 +57,15 @@ fn app<'a>() -> App<'a, 'a> {
         ).subcommand(SubCommand::with_name("server"))
 }
 
-fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
+fn load_yml(file_path: String) -> Result<serde_yaml::Mapping> {
     if !Path::new(&file_path).exists() {
         return Err(ErrorKind::UserError("Cannt find input file.".to_owned()).into());
     }
 
-    let maybefile = File::open(file_path).chain_err(|| "safsdf");
     let mut contents = String::new();
+    let maybefile =
+        File::open(file_path).chain_err(|| ErrorKind::RuntimeError("Can't open file".to_owned()));
+
     maybefile.and_then(|file| {
         file.read_to_string(&mut contents)
             .or(Err(ErrorKind::RuntimeError(
@@ -71,12 +73,9 @@ fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
             ).into()))
     })?;
 
-    let result = serde_yaml::from_str::<serde_yaml::Value>(&contents);
-    Ok(result
-        .and_then(|res| Ok(res))
-        .or(Err(ErrorKind::RuntimeError(
-            "Could not parse result to YAML.".to_owned()
-        )))?)
+    serde_yaml::from_str::<serde_yaml::Mapping>(&contents).or(Err(ErrorKind::RuntimeError(
+        "Could not parse result to YAML.".to_owned(),
+    ).into()))
 }
 
 fn main() {
