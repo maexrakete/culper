@@ -11,7 +11,6 @@ pub use errors::*;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
-use std::path::Path;
 use std::str;
 use vault::Vault;
 
@@ -57,23 +56,18 @@ fn app<'a>() -> App<'a, 'a> {
         ).subcommand(SubCommand::with_name("server"))
 }
 
-fn load_yml(file_path: String) -> Result<serde_yaml::Mapping> {
-    if !Path::new(&file_path).exists() {
-        return Err(ErrorKind::UserError("Cannt find input file.".to_owned()).into());
-    }
-
+fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
     let mut contents = String::new();
     let maybefile =
         File::open(file_path).chain_err(|| ErrorKind::RuntimeError("Can't open file".to_owned()));
-
-    maybefile.and_then(|file| {
+    maybefile.and_then(|mut file| {
         file.read_to_string(&mut contents)
             .or(Err(ErrorKind::RuntimeError(
                 "Could not parse result to YAML.".to_owned(),
             ).into()))
     })?;
 
-    serde_yaml::from_str::<serde_yaml::Mapping>(&contents).or(Err(ErrorKind::RuntimeError(
+    serde_yaml::from_str::<serde_yaml::Value>(&contents).or(Err(ErrorKind::RuntimeError(
         "Could not parse result to YAML.".to_owned(),
     ).into()))
 }
@@ -84,7 +78,7 @@ fn main() {
     match matches.subcommand() {
         ("encrypt", Some(sub)) => {
             let ifile = matches.value_of("file").unwrap(); // clap handles this;
-            let yml = load_yml(ifile.to_string())?;
+            let mut yml = load_yml(ifile.to_string()).expect("Could not load yml.");
             let vals: Vec<&str> = sub.values_of("value").unwrap().collect();
             encrypt_yml(&mut yml, &vals);
 
@@ -99,7 +93,7 @@ fn main() {
         }
         ("decrypt", _) => {
             let ifile = matches.value_of("file").unwrap(); // clap handles this;
-            let mut yml = load_yml(ifile.to_string())?;
+            let mut yml = load_yml(ifile.to_string()).expect("Could not load yml.");
 
             eprint!("Enter password for decryption: ");
             let _ = stdout().flush();

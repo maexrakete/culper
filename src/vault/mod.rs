@@ -115,9 +115,16 @@ impl Vault {
         let payload_bytes = decode(&self.pass).expect("Something wrong with the pass");
         match self.salt {
             Some(ref s) => {
-                let derived_key =
-                    self.derive_key(password, decode(s).map_err(|e| e.into())?.as_slice());
-                let iv_bytes = decode(&s).map_err(|e| e.into())?;
+                let derived_key = self.derive_key(
+                    password,
+                    decode(s)
+                        .or(Err(ErrorKind::RuntimeError(
+                            "Could not decode base64.".to_owned(),
+                        )))?.as_slice(),
+                );
+                let iv_bytes = decode(&s).or(Err(ErrorKind::RuntimeError(
+                    "Could not decode base64.".to_owned(),
+                )))?;
 
                 match aes::decrypt(
                     payload_bytes.as_slice(),
