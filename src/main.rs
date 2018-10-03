@@ -3,67 +3,89 @@ extern crate clap;
 extern crate crypto;
 extern crate rand;
 extern crate serde_yaml;
+#[macro_use]
+extern crate error_chain;
 
 use clap::{App, Arg, SubCommand};
+pub use errors::*;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 use std::path::Path;
 use std::str;
 use vault::Vault;
-fn app<'a>() -> App<'a,'a> {
-  App::new("culper")
-      .version("0.1.0")
-      .author("Max Kiehnscherf")
-      .about("Embed crypted values in your yaml")
-      .arg(
-          Arg::with_name("file")
-              .short("f")
-              .long("file")
-              .help("Sets input file")
-              .takes_value(true)
-              .required(true),
-      ).subcommand(
-          SubCommand::with_name("encrypt")
-              .arg(
-                  Arg::with_name("value")
-                      .short("v")
-                      .long("value")
-                      .help("YAML path which should be encrypted")
-                      .multiple(true)
-                      .required(true)
-                      .takes_value(true),
-              ).arg(
-                  Arg::with_name("overwrite")
-                      .short("o")
-                      .long("overwrite")
-                      .help("Overwrites input file")
-                      .conflicts_with("file")
-                      .takes_value(false),
-              ),
-      ).subcommand(SubCommand::with_name("decrypt"))
+
+fn app<'a>() -> App<'a, 'a> {
+    App::new("culper")
+        .version("0.1.0")
+        .author("Max Kiehnscherf")
+        .about("Embed crypted values in your yaml")
+        .subcommand(
+            SubCommand::with_name("encrypt")
+                .arg(
+                    Arg::with_name("value")
+                        .short("v")
+                        .long("value")
+                        .help("YAML path which should be encrypted")
+                        .multiple(true)
+                        .required(true)
+                        .takes_value(true),
+                ).arg(
+                    Arg::with_name("overwrite")
+                        .short("o")
+                        .long("overwrite")
+                        .help("Overwrites input file")
+                        .conflicts_with("file")
+                        .takes_value(false),
+                ).arg(
+                    Arg::with_name("file")
+                        .short("f")
+                        .long("file")
+                        .help("Sets input file")
+                        .takes_value(true)
+                        .required(true),
+                ),
+        ).subcommand(
+            SubCommand::with_name("decrypt").arg(
+                Arg::with_name("file")
+                    .short("f")
+                    .long("file")
+                    .help("Sets input file")
+                    .takes_value(true)
+                    .required(true),
+            ),
+        ).subcommand(SubCommand::with_name("server"))
+}
+
+fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
+    if !Path::new(&file_path).exists() {
+        return Err(ErrorKind::UserError("Cannt find input file.".to_owned()).into());
+    }
+
+    let maybefile = File::open(file_path).chain_err(|| "safsdf");
+    let mut contents = String::new();
+    maybefile.and_then(|file| {
+        file.read_to_string(&mut contents)
+            .or(Err(ErrorKind::RuntimeError(
+                "Could not parse result to YAML.".to_owned(),
+            ).into()))
+    })?;
+
+    let result = serde_yaml::from_str::<serde_yaml::Value>(&contents);
+    Ok(result
+        .and_then(|res| Ok(res))
+        .or(Err(ErrorKind::RuntimeError(
+            "Could not parse result to YAML.".to_owned()
+        )))?)
 }
 
 fn main() {
     let matches = app().get_matches();
 
-    let ifile = matches.value_of("file").unwrap(); // clap handles this;
-
-    if !Path::new(ifile).exists() {
-        panic!("File not found")
-    }
-
-    let mut file = File::open(ifile).expect("Could not open input file");
-    let mut contents = String::new();
-
-    file.read_to_string(&mut contents)
-        .expect("Could not read file contents");
-
-    let mut yml: serde_yaml::Value =
-        serde_yaml::from_str(&contents).expect("Could not parse file content");
-
     match matches.subcommand() {
         ("encrypt", Some(sub)) => {
+            let ifile = matches.value_of("file").unwrap(); // clap handles this;
+            let yml = load_yml(ifile.to_string())?;
             let vals: Vec<&str> = sub.values_of("value").unwrap().collect();
             encrypt_yml(&mut yml, &vals);
 
@@ -77,6 +99,9 @@ fn main() {
             }
         }
         ("decrypt", _) => {
+            let ifile = matches.value_of("file").unwrap(); // clap handles this;
+            let mut yml = load_yml(ifile.to_string())?;
+
             eprint!("Enter password for decryption: ");
             let _ = stdout().flush();
             let mut password = String::new();
@@ -95,6 +120,9 @@ fn main() {
                 let uncrypted_yml = yaml::traverse_yml(&yml.as_mapping().unwrap(), &replacefn);
                 println!("{}", serde_yaml::to_string(&uncrypted_yml).unwrap())
             }
+        }
+        ("server", _) => {
+            server::run();
         }
         _ => println!("nothing"), // clap handles this
     }
@@ -121,13 +149,12 @@ fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
     }
 }
 
-fn make_vault(
-    plain: &String,
-    pass: String,
-) -> Result<Vault, crypto::symmetriccipher::SymmetricCipherError> {
-    Vault::new_unsealed(plain.to_owned()).seal(pass)
+fn make_vault(plain: &String, pass: String) -> Result<Vault> {
+    Ok(Vault::new_unsealed(plain.to_owned()).seal(pass)?)
 }
 
 mod aes;
+mod errors;
+mod server;
 mod vault;
 mod yaml;
