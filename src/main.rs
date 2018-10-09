@@ -2,9 +2,15 @@ extern crate base64;
 extern crate clap;
 extern crate crypto;
 extern crate rand;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_yaml;
+extern crate toml;
 #[macro_use]
 extern crate error_chain;
+extern crate iron;
+extern crate mount;
+extern crate staticfile;
 
 use clap::{App, Arg, SubCommand};
 pub use errors::*;
@@ -147,6 +153,7 @@ fn make_vault(plain: &String, pass: String) -> Result<Vault> {
 }
 
 mod aes;
+mod config;
 mod errors;
 mod server;
 mod vault;
