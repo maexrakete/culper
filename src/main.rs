@@ -1,6 +1,10 @@
+#![feature(proc_macro_hygiene)]
+#![feature(decl_macro)]
+
 extern crate base64;
 extern crate clap;
 extern crate crypto;
+extern crate dirs;
 extern crate rand;
 #[macro_use]
 extern crate serde_derive;
@@ -8,23 +12,36 @@ extern crate serde_yaml;
 extern crate toml;
 #[macro_use]
 extern crate error_chain;
-extern crate iron;
-extern crate mount;
-extern crate staticfile;
+extern crate regex;
+extern crate uuid;
+#[macro_use]
+extern crate rocket;
+extern crate parking_lot;
+extern crate rocket_contrib;
+#[macro_use]
+extern crate duct;
+
 
 use clap::{App, Arg, SubCommand};
+use config::{ConfigReader, CulperConfig};
 pub use errors::*;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 use std::str;
-use vault::Vault;
+use vault::{EncryptionFormat, OpenableVault, SealableVault, UnsealedVault, VaultHandler};
 
 fn app<'a>() -> App<'a, 'a> {
     App::new("culper")
         .version("0.1.0")
         .author("Max Kiehnscherf")
         .about("Embed crypted values in your yaml")
+        .arg(
+            Arg::with_name("config")
+                .long("config")
+                .help("Sets config file")
+                .takes_value(true),
+        )
         .subcommand(
             SubCommand::with_name("encrypt")
                 .arg(
@@ -32,17 +49,17 @@ fn app<'a>() -> App<'a, 'a> {
                         .short("v")
                         .long("value")
                         .help("YAML path which should be encrypted")
-                        .multiple(true)
                         .required(true)
                         .takes_value(true),
-                ).arg(
+                )
+                .arg(
                     Arg::with_name("overwrite")
                         .short("o")
                         .long("overwrite")
                         .help("Overwrites input file")
-                        .conflicts_with("file")
                         .takes_value(false),
-                ).arg(
+                )
+                .arg(
                     Arg::with_name("file")
                         .short("f")
                         .long("file")
@@ -50,7 +67,8 @@ fn app<'a>() -> App<'a, 'a> {
                         .takes_value(true)
                         .required(true),
                 ),
-        ).subcommand(
+        )
+        .subcommand(
             SubCommand::with_name("decrypt").arg(
                 Arg::with_name("file")
                     .short("f")
@@ -59,7 +77,19 @@ fn app<'a>() -> App<'a, 'a> {
                     .takes_value(true)
                     .required(true),
             ),
-        ).subcommand(SubCommand::with_name("server"))
+        )
+        .subcommand(SubCommand::with_name("server"))
+        .subcommand(
+            SubCommand::with_name("setup")
+                .arg(Arg::with_name("sever").help("Generate server settings")),
+        )
+        .subcommand(
+            SubCommand::with_name("gpg")
+                .subcommand(SubCommand::with_name("owner").subcommand(SubCommand::with_name("add")))
+                .subcommand(
+                    SubCommand::with_name("target").subcommand(SubCommand::with_name("add")),
+                ),
+        )
 }
 
 fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
@@ -70,23 +100,25 @@ fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
         file.read_to_string(&mut contents)
             .or(Err(ErrorKind::RuntimeError(
                 "Could not parse result to YAML.".to_owned(),
-            ).into()))
+            )
+            .into()))
     })?;
 
     serde_yaml::from_str::<serde_yaml::Value>(&contents).or(Err(ErrorKind::RuntimeError(
         "Could not parse result to YAML.".to_owned(),
-    ).into()))
+    )
+    .into()))
 }
 
-fn main() {
+fn run() -> Result<()> {
     let matches = app().get_matches();
-
+    let config = ConfigReader::new(matches.value_of("config"))?.read()?;
     match matches.subcommand() {
         ("encrypt", Some(sub)) => {
-            let ifile = matches.value_of("file").unwrap(); // clap handles this;
-            let mut yml = load_yml(ifile.to_string()).expect("Could not load yml.");
-            let vals: Vec<&str> = sub.values_of("value").unwrap().collect();
-            encrypt_yml(&mut yml, &vals);
+            let ifile = sub.value_of("file").unwrap(); // clap handles this;
+            let mut yml = load_yml(ifile.to_string())?;
+            let vals: &str = sub.value_of("value").unwrap();
+            encrypt_yml(&mut yml, &vals, config)?;
 
             match sub.is_present("overwrite") {
                 true => {
@@ -97,64 +129,74 @@ fn main() {
                 false => println!("{}", serde_yaml::to_string(&yml).unwrap()),
             }
         }
-        ("decrypt", _) => {
-            let ifile = matches.value_of("file").unwrap(); // clap handles this;
-            let mut yml = load_yml(ifile.to_string()).expect("Could not load yml.");
-
-            eprint!("Enter password for decryption: ");
-            let _ = stdout().flush();
-            let mut password = String::new();
-
-            if stdin().read_line(&mut password).is_ok() {
-                let replacefn = |val: &mut String| match Vault::parse(val) {
-                    Ok(d) => {
-                        let val = d
-                            .unseal(password.to_owned())
-                            .expect("Could not decrypt Vault:");
-
-                        Some(val.pass.to_owned())
+        ("decrypt", Some(sub)) => {
+            let ifile = sub.value_of("file").unwrap(); // clap handles this;
+            let mut yml = load_yml(ifile.to_string())?;
+            let replacefn = |val: &mut String| match vault::parse(val) {
+                Ok(d) => match d.format {
+                    EncryptionFormat::GPG_PUB_KEY => {
+                        let vault_handler = gpg::PubKeyVaultHandler::new(config.me.id.to_owned());
+                        let vault = d.unseal(&|vault| vault_handler.decrypt(vault))?;
+                        Ok(Some(vault.plain_secret))
                     }
-                    _ => None,
-                };
-                let uncrypted_yml = yaml::traverse_yml(&yml.as_mapping().unwrap(), &replacefn);
-                println!("{}", serde_yaml::to_string(&uncrypted_yml).unwrap())
-            }
+                },
+                _ => Ok(None),
+            };
+            let uncrypted_yml = yaml::traverse_yml(&yml.as_mapping().unwrap(), &replacefn)?;
+            println!("{}", serde_yaml::to_string(&uncrypted_yml)?)
         }
         ("server", _) => {
-            server::run();
+            server::run(config);
         }
+        ("gpg", subcommand) => {
+            gpg::handle(subcommand.unwrap())?;
+        }
+        ("setup", settings) => match settings {
+            Some(_) => setup::server_setup()?,
+            None => setup::setup()?,
+        },
         _ => println!("nothing"), // clap handles this
     }
+    Ok(())
 }
 
-fn encrypt_yml(yml: &mut serde_yaml::Value, values: &Vec<&str>) {
-    eprint!("Enter password for encryption: ");
-    let _ = stdout().flush();
+fn main() {
+    if let Err(ref e) = run() {
+        println!("error: {}", e);
 
-    let mut password = String::new();
-    if stdin().read_line(&mut password).is_ok() {
-        for s in values {
-            eprint!("Enter value for {} to encrypt: ", s);
-            let _ = stdout().flush();
-
-            let mut value = String::new();
-            if stdin().read_line(&mut value).is_ok() {
-                let trimmed_value = value.trim_right();
-                let vault = make_vault(&trimmed_value.to_owned(), password.to_owned())
-                    .expect("Could not build Vault.");
-                yaml::replace_value(yml, s.split(".").collect(), vault.as_str());
-            }
+        for e in e.iter().skip(1) {
+            println!("caused by: {}", e);
         }
+
+        // The backtrace is not always generated. Try to run this example
+        // with `RUST_BACKTRACE=1`.
+        if let Some(backtrace) = e.backtrace() {
+            println!("backtrace: {:?}", backtrace);
+        }
+
+        ::std::process::exit(1);
     }
 }
 
-fn make_vault(plain: &String, pass: String) -> Result<Vault> {
-    Ok(Vault::new_unsealed(plain.to_owned()).seal(pass)?)
+fn encrypt_yml(yml: &mut serde_yaml::Value, path: &str, culper_config: CulperConfig) -> Result<()> {
+    eprint!("Enter value for {} to encrypt: ", path);
+    let _ = stdout().flush();
+    let vault_handler = gpg::PubKeyVaultHandler::new(culper_config.me.id);
+    let mut value = String::new();
+    stdin().read_line(&mut value)?;
+
+    let vault = UnsealedVault::new(value.trim_right().to_owned(), EncryptionFormat::GPG_PUB_KEY)
+        .seal(&|vault| vault_handler.encrypt(vault))?;
+    yaml::replace_value(yml, path.split(".").collect(), vault.to_string());
+
+    Ok(())
 }
 
 mod aes;
 mod config;
 mod errors;
+mod gpg;
 mod server;
+mod setup;
 mod vault;
 mod yaml;

@@ -16,6 +16,10 @@ error_chain!{
   foreign_links {
     Io(::std::io::Error);
     Toml(::toml::de::Error);
+    TomlSerializing(::toml::ser::Error);
     Utf8(::std::string::FromUtf8Error);
+    Regex(::regex::Error);
+    SerdeYml(::serde_yaml::Error);
+    Base64Decode(::base64::DecodeError);
   }
 }

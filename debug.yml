@@ -13,8 +13,8 @@ services:
       - "traefik.backend=whoami"
       - "traefik.port=80"
       - "traefik.frontend.rule=Host:whoami.docker.localhost"
-    test: "CULPER.AES_CBC_PAD.wufNOUZa15fJvuwvobTHjA==.RVje99JJkYqnYB6vgq4rgS0uPkh+I3n950scM0LxZiU="
+    network_doedel: CULPER.GPG_PUB_KEY.hQIMA0vYlWdCJ7aSAQ/8CVnkWxoj62mcua4AiyCceLb/iPzXQJZWzjlyXJxGtwglnx2f2XGfSUeh1Tw1DzLpBPuZ+8ZxBv4FiMK8VPuVe0mSYLI+EN+QPhZMcPFoAErbKJNjppJrw1GHRAGKT3P9PrOkqn/h3wlytmicEC+gv4yMSw/hMIYTqEP0EVdRIPX7NXJzCU/46pMdkS4pkKOiBbn6uTAYZM2VjUPTckRpmWw5WzP/AdkdibVs+GIYOLTdw9vNhBvqzRUMadE5JTxJ8sWImlohVhbEZRKDZIeWaR4/7LK/zvjvW+SKmDg4Rz0CZOtW1bhEqd7DezM4F6Mnjn0K4vYLJEdA+pdttAS31KJZ6PN8ka5q8knU8T6F3A6nG4Kcq185GMfIwCUvPI2SGUAsIW2kwlwoXYMg1/GKaCQcGfXbb/NGN0iihYJpH19siu6DkD51PixTYNhZH2vv9jLdcb2jgYK6WMw5qEpimLbN0WPAJzECMNxNFUc2tCAaV4bfPJun9Z6btliB2VlFSJd2+AQg+QV4AnhhxT1zEsJDI443Q94rEkCogreGnlhQyZQcbjvjqV1NF+glkeNUORPszUrjYXlDHQrpZU9+Aphj6SQKHs4nvrCxLoR+1JWhiJ1uvPzwIOYv/17kU2ZvNJNdR8fc5WyBEVVsFeOr6f7RbsDlZBq6HQUw41RNNBPSNQFhijdDT0ICjN4C9GuPc/xjaZTcON14LjWpLtuwuOwEGvwmGbn+5kU5ggmVi5Xs1JlFLGSj
 networks:
   web:
     external:
-      name: traefik_webgateway
+      name: traefik_webgatewaywebgateway

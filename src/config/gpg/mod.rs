@@ -42,8 +42,10 @@ fn create_gpg_keys() -> Result<()> {
             format!(
                 "Generating key files failed: {}",
                 String::from_utf8(command.stderr)?
-            ).to_owned(),
-        ).into());
+            )
+            .to_owned(),
+        )
+        .into());
     }
 
     Ok(())
@@ -61,33 +63,47 @@ fn export_pubkey() -> Result<String> {
             format!(
                 "Generating key files failed: {}",
                 String::from_utf8(output.stderr)?
-            ).to_owned(),
-        ).into());
+            )
+            .to_owned(),
+        )
+        .into());
     }
 
     Ok(String::from_utf8(output.stdout)?)
 }
+
 pub fn create_gpg_config() -> Result<()> {
+    create_gpg_folder()?;
+    Ok(())
+}
+
+pub fn create_gpg_server_config() -> Result<()> {
     create_gpg_folder()?;
     create_gpg_batch_file()?;
     create_gpg_keys()?;
     DirBuilder::new().create("public")?;
 
-    export_pubkey().and_then(|key| {
-        File::create("public/pubkey.asc")
-            .or(Err(ErrorKind::RuntimeError(
-                "Could not create public key-file.".to_owned(),
-            )))?.write_all(key.to_owned().as_bytes())
-            .or(Err(ErrorKind::RuntimeError(
-                "Could not write to public key-file.".to_owned(),
-            )))?;
-        Ok(())
-    }).and_then(|_| {
-      fs::remove_file("foo").or_else(|err| {
-        println!("Could not delete temporary batch config: {}", err.to_string());
-        Ok(())
-      })
-    })?;
+    export_pubkey()
+        .and_then(|key| {
+            File::create("public/pubkey.asc")
+                .or(Err(ErrorKind::RuntimeError(
+                    "Could not create public key-file.".to_owned(),
+                )))?
+                .write_all(key.to_owned().as_bytes())
+                .or(Err(ErrorKind::RuntimeError(
+                    "Could not write to public key-file.".to_owned(),
+                )))?;
+            Ok(())
+        })
+        .and_then(|_| {
+            fs::remove_file("foo").or_else(|err| {
+                println!(
+                    "Could not delete temporary batch config: {}",
+                    err.to_string()
+                );
+                Ok(())
+            })
+        })?;
 
     Ok(())
 }
