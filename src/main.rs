@@ -21,10 +21,10 @@ extern crate rocket_contrib;
 #[macro_use]
 extern crate duct;
 
-
 use clap::{App, Arg, SubCommand};
 use config::{ConfigReader, CulperConfig};
-pub use errors::*;
+use errors::*;
+use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
@@ -39,7 +39,13 @@ fn app<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name("config")
                 .long("config")
-                .help("Sets config file")
+                .help("Sets path to config file")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("gpg_path")
+                .long("gpg_path")
+                .help("Sets path to gpg folder")
                 .takes_value(true),
         )
         .subcommand(
@@ -112,13 +118,17 @@ fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
 
 fn run() -> Result<()> {
     let matches = app().get_matches();
+    let gpg_path = match matches.value_of("gpg_path") {
+        Some(val) => RefCell::new(Some(val.to_owned())),
+        None => RefCell::new(None),
+    };
     let config = ConfigReader::new(matches.value_of("config"))?.read()?;
-    match matches.subcommand() {
+    match &matches.subcommand() {
         ("encrypt", Some(sub)) => {
             let ifile = sub.value_of("file").unwrap(); // clap handles this;
             let mut yml = load_yml(ifile.to_string())?;
             let vals: &str = sub.value_of("value").unwrap();
-            encrypt_yml(&mut yml, &vals, config)?;
+            encrypt_yml(&mut yml, &vals, config, gpg_path.clone().into_inner())?;
 
             match sub.is_present("overwrite") {
                 true => {
@@ -135,7 +145,10 @@ fn run() -> Result<()> {
             let replacefn = |val: &mut String| match vault::parse(val) {
                 Ok(d) => match d.format {
                     EncryptionFormat::GPG_PUB_KEY => {
-                        let vault_handler = gpg::PubKeyVaultHandler::new(config.me.id.to_owned());
+                        let vault_handler = gpg::PubKeyVaultHandler::new(
+                            config.me.id.to_owned(),
+                            gpg_path.clone().into_inner(),
+                        );
                         let vault = d.unseal(&|vault| vault_handler.decrypt(vault))?;
                         Ok(Some(vault.plain_secret))
                     }
@@ -146,14 +159,14 @@ fn run() -> Result<()> {
             println!("{}", serde_yaml::to_string(&uncrypted_yml)?)
         }
         ("server", _) => {
-            server::run(config);
+            server::run(config, gpg_path.clone().into_inner());
         }
         ("gpg", subcommand) => {
-            gpg::handle(subcommand.unwrap())?;
+            gpg::handle(subcommand.unwrap(), gpg_path.clone().into_inner())?;
         }
         ("setup", settings) => match settings {
-            Some(_) => setup::server_setup()?,
-            None => setup::setup()?,
+            Some(_) => setup::server_setup(gpg_path.clone().into_inner())?,
+            None => setup::setup(gpg_path.clone().into_inner())?,
         },
         _ => println!("nothing"), // clap handles this
     }
@@ -178,10 +191,15 @@ fn main() {
     }
 }
 
-fn encrypt_yml(yml: &mut serde_yaml::Value, path: &str, culper_config: CulperConfig) -> Result<()> {
+fn encrypt_yml(
+    yml: &mut serde_yaml::Value,
+    path: &str,
+    culper_config: CulperConfig,
+    gpg_path: Option<String>,
+) -> Result<()> {
     eprint!("Enter value for {} to encrypt: ", path);
     let _ = stdout().flush();
-    let vault_handler = gpg::PubKeyVaultHandler::new(culper_config.me.id);
+    let vault_handler = gpg::PubKeyVaultHandler::new(culper_config.me.id, gpg_path);
     let mut value = String::new();
     stdin().read_line(&mut value)?;
 

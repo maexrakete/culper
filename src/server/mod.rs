@@ -1,7 +1,7 @@
 use config;
 use config::{ConfigReader, CulperConfig, UserConfig};
 use errors::*;
-use gpg;
+use gpg::GpgManager;
 use parking_lot::RwLock;
 use rocket::data::FromDataSimple;
 use rocket::http::Status;
@@ -55,9 +55,7 @@ impl FromDataSimple for SignedRequest {
         if let Err(_) = data.open().take(1000000).read_to_string(&mut body) {
             return Outcome::Failure((Status::InternalServerError, ()));
         }
-        match
-            request.headers().get_one("x-req-sig")
-         {
+        match request.headers().get_one("x-req-sig") {
             Some(signature) => Outcome::Success(SignedRequest {
                 body: body,
                 signature: signature.to_owned(),
@@ -79,8 +77,9 @@ fn extract_option_from_rwlock(state: &State<RwLock<Option<String>>>) -> Option<S
     }
 }
 
-fn update_culperconfig_with_admin(admin: &SetupData) -> Result<()> {
-    match gpg::import_key(admin.pubkey.to_owned()) {
+fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: Option<String>) -> Result<()> {
+    let gpg_manager = GpgManager::new(gpg_config)?;
+    match gpg_manager.import_key(admin.pubkey.to_owned()) {
         Ok(val) => {
             let mut config_reader = ConfigReader::new(None)?;
             let mut config = config_reader.read()?;
@@ -111,13 +110,14 @@ fn update_culperconfig_with_admin(admin: &SetupData) -> Result<()> {
 fn register_admin(
     key: SetupGuard,
     secret_lock: State<RwLock<Option<String>>>,
+    gpg_config: State<Option<String>>,
     admin_data: Json<SetupData>,
 ) -> Result<SetupResult> {
     let secret_key = extract_option_from_rwlock(&secret_lock);
     match (secret_key, key.0) {
         (Some(ref secret), Some(ref header)) => {
             if secret.to_owned() == header.to_owned() {
-                update_culperconfig_with_admin(&admin_data)?;
+                update_culperconfig_with_admin(&admin_data, gpg_config.clone())?;
                 let mut a = secret_lock.write();
                 println!("Obtained lock, overwriting secret.");
                 *a = None;
@@ -131,12 +131,15 @@ fn register_admin(
 }
 
 #[post("/demo", data = "<body>")]
-fn demo(body: SignedRequest) -> Result<String> {
-  gpg::verify(body.body.to_owned(), body.signature).unwrap();
-  Ok(body.body)
+fn demo(body: SignedRequest, gpg_config: State<Option<String>>) -> Result<String> {
+    let gpg_manager = GpgManager::new(gpg_config.clone())?;
+    gpg_manager
+        .verify(body.body.to_owned(), body.signature)
+        .unwrap();
+    Ok(body.body)
 }
 
-pub fn run(config: CulperConfig) -> Result<()> {
+pub fn run<'a>(config: CulperConfig, gpg_config: Option<String>) -> Result<()> {
     if !config::gpg::has_config() {
         config::gpg::create_gpg_server_config()?;
     }
@@ -161,6 +164,7 @@ pub fn run(config: CulperConfig) -> Result<()> {
 
     rocket::ignite()
         .manage(RwLock::new(secret))
+        .manage(gpg_config)
         .mount("/public", StaticFiles::from(Path::new("public")))
         .mount("/", routes![register_admin, demo])
         .launch();
