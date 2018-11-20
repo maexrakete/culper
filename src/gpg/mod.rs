@@ -11,11 +11,11 @@ use vault::{SealedVault, UnsealedVault, VaultHandler};
 
 pub struct PubKeyVaultHandler {
     recipient: String,
-    gpg_path: Option<String>,
+    gpg_path: String,
 }
 
 impl PubKeyVaultHandler {
-    pub fn new(recipient: String, gpg_path: Option<String>) -> PubKeyVaultHandler {
+    pub fn new(recipient: String, gpg_path: String) -> PubKeyVaultHandler {
         PubKeyVaultHandler {
             recipient: recipient,
             gpg_path: gpg_path,
@@ -25,7 +25,7 @@ impl PubKeyVaultHandler {
 
 impl VaultHandler for PubKeyVaultHandler {
     fn encrypt(&self, open_vault: UnsealedVault) -> Result<SealedVault> {
-        let gpg_manager = GpgManager::new(self.gpg_path.clone())?;
+        let gpg_manager = GpgManager::new(self.gpg_path.to_owned())?;
         Ok(SealedVault {
             secret: gpg_manager.encrypt(open_vault.plain_secret, self.recipient.to_owned())?,
             format: open_vault.format,
@@ -33,7 +33,7 @@ impl VaultHandler for PubKeyVaultHandler {
     }
 
     fn decrypt(&self, open_vault: SealedVault) -> Result<UnsealedVault> {
-        let gpg_manager = GpgManager::new(self.gpg_path.clone())?;
+        let gpg_manager = GpgManager::new(self.gpg_path.to_owned())?;
         Ok(UnsealedVault {
             plain_secret: String::from_utf8(gpg_manager.decrypt(open_vault.secret)?).unwrap(),
             format: open_vault.format,
@@ -46,19 +46,7 @@ pub struct GpgManager {
 }
 
 impl GpgManager {
-    pub fn new(raw_gpg_path: Option<String>) -> Result<GpgManager> {
-        let gpg_path = match raw_gpg_path {
-            Some(val) => val.to_string(),
-            None => get_config_path()?
-                .into_os_string()
-                .into_string()
-                .map_err(|_| {
-                    ErrorKind::RuntimeError(
-                        "GPG Path does contain invalid UTF-8 characters.".to_owned(),
-                    )
-                })
-                .map(|i| i)?,
-        };
+    pub fn new(gpg_path: String) -> Result<GpgManager> {
         Ok(GpgManager { gpg_path: gpg_path })
     }
 
@@ -260,7 +248,7 @@ fn get_config_path() -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn handle(command: &ArgMatches, gpg_path: Option<String>) -> Result<()> {
+pub fn handle(command: &ArgMatches, gpg_path: String) -> Result<()> {
     let gpg_manager = GpgManager::new(gpg_path)?;
     match command.subcommand() {
         ("owner", Some(subcommand)) => match subcommand.subcommand_name() {

@@ -77,7 +77,7 @@ fn extract_option_from_rwlock(state: &State<RwLock<Option<String>>>) -> Option<S
     }
 }
 
-fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: Option<String>) -> Result<()> {
+fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: String) -> Result<()> {
     let gpg_manager = GpgManager::new(gpg_config)?;
     match gpg_manager.import_key(admin.pubkey.to_owned()) {
         Ok(val) => {
@@ -110,14 +110,14 @@ fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: Option<String>)
 fn register_admin(
     key: SetupGuard,
     secret_lock: State<RwLock<Option<String>>>,
-    gpg_config: State<Option<String>>,
+    gpg_config: State<String>,
     admin_data: Json<SetupData>,
 ) -> Result<SetupResult> {
     let secret_key = extract_option_from_rwlock(&secret_lock);
     match (secret_key, key.0) {
         (Some(ref secret), Some(ref header)) => {
             if secret.to_owned() == header.to_owned() {
-                update_culperconfig_with_admin(&admin_data, gpg_config.clone())?;
+                update_culperconfig_with_admin(&admin_data, gpg_config.to_owned())?;
                 let mut a = secret_lock.write();
                 println!("Obtained lock, overwriting secret.");
                 *a = None;
@@ -131,17 +131,17 @@ fn register_admin(
 }
 
 #[post("/demo", data = "<body>")]
-fn demo(body: SignedRequest, gpg_config: State<Option<String>>) -> Result<String> {
-    let gpg_manager = GpgManager::new(gpg_config.clone())?;
+fn demo(body: SignedRequest, gpg_config: State<String>) -> Result<String> {
+    let gpg_manager = GpgManager::new(gpg_config.to_owned())?;
     gpg_manager
         .verify(body.body.to_owned(), body.signature)
         .unwrap();
     Ok(body.body)
 }
 
-pub fn run<'a>(config: CulperConfig, gpg_config: Option<String>) -> Result<()> {
-    if !config::gpg::has_config() {
-        config::gpg::create_gpg_server_config()?;
+pub fn run(config: CulperConfig, gpg_config: String) -> Result<()> {
+    if !config::gpg::has_config(gpg_config.to_owned()) {
+        config::gpg::create_gpg_server_config(gpg_config.to_owned())?;
     }
     let secret = if let None = config.admins {
         let secret = Uuid::new_v4().to_simple().to_string();
@@ -161,10 +161,9 @@ pub fn run<'a>(config: CulperConfig, gpg_config: Option<String>) -> Result<()> {
     } else {
         None
     };
-
     rocket::ignite()
         .manage(RwLock::new(secret))
-        .manage(gpg_config)
+        .manage(gpg_config.to_owned())
         .mount("/public", StaticFiles::from(Path::new("public")))
         .mount("/", routes![register_admin, demo])
         .launch();
