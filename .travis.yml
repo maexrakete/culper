@@ -6,15 +6,8 @@ addons:
         packages:
             - libssl-dev
 
-# Need to cache the whole `.cargo` directory to keep .crates.toml for
-# cargo-update to work
-cache:
-  directories:
-    - /home/travis/.cargo
-
-# But don't cache the cargo registry
-before_cache:
-  - rm -rf /home/travis/.cargo/registryrust: nightly
+rust: nightly
+cache: cargo
 
 jobs:
   include:
@@ -24,10 +17,12 @@ jobs:
     - stage: cleanup
       script: cargo clean
 
-    - stage: run tests
+    - name: "run tests"
+      stage: quick build
       script: cargo test
 
-    - stage: test build 
+    - name: "test build"
+      stage: quick build
       script: cargo build 
 
     - stage: release build 
@@ -43,7 +38,7 @@ stages:
 
   - run tests
 
-  - name: test build
+  - name: quick build 
     if: branch != master
 
   - name: release build
