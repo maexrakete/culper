@@ -9,6 +9,9 @@ addons:
 rust: nightly
 cache: cargo
 
+services:
+  - docker
+
 jobs:
   include:
     - stage: prepare
@@ -27,7 +30,7 @@ jobs:
 
     - stage: release build 
       script:
-        - cargo build --release
+        - docker run -e LIBZ_SYS_STATIC=1 --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder:nightly cargo build --release
         - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
 
 stages:
@@ -48,7 +51,7 @@ deploy:
   provider: releases
   api_key:
     secure: "Xhw+S2ZgZZwvLm6VWBcpNCe2c4mYMiJa4q6Enf6BzVZ1SNePFUdOc5W5sp+AHp1Aj5omTDvj6CEq/iuxYjbCY2B4oQCriNGPKoxHa6+6F5ZMs0f7Fyn4Bi7mrrfO67N6oBmofkw5XVNfe9fa9VYCI75o3qwkUspbOxXCFZmGSyN6c56WjLgGl0nLXoL3Rw7L5Xp9/TslnSikRqFQEBOcPVegkwaWWui/S8r0raYguRp2ew7x4LcCRDbYx58vsHnnwOO/05toCZ+5NhtvrLaaOiWhOwiFP+I5InRLOzWUQmoHQV2wVDHgiK1F9OXlwkOKhV0h7XFGMaf3s/W3/KnV56hhYCeqZrzGuwD35YPDwatjLp/EBNEUJTX2e4jWRJJhmFT55OS9xo/fZQLHmNPKL4Npc7zRK/5xRMt920wj76Z0LmL97caUbWbi7Coop2vFCExVpANvMO7xBG81U2Ae0J9zI0n75Cvq/fA0oB9WQaXO4E4yukpQ5bOe8oWRFlUQuv3EzfManH3WM85h27XiT4eecVwfXsVdA/oY8AMTyXDw11Bwo7R2bPbj9J+q5MoctUsI6C7MAcDrxFmv32lm82pp4YKCzmDJFlD9nb/xGaAh1f6EaKbWZI+yKUHI/4bCJe8bNR75evyt0YQt+GWzl6wzN7CkOGp9PRmDc3ecDhc="
-  file: "target/release/culper"
+  file: "target/x86_64-unknown-linux-musl/release/culper"
   skip_cleanup: true
   on:
     tags: true
