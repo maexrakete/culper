@@ -18,12 +18,10 @@ Culper comes with following advantages:
 
 ## Todo
 
-- [x] make gpg folder configurable
 - [ ] Improve & document Setup flow
 - [ ] build dockerfile for server 
 - [ ] security audit (e.g. fix passing request signature directly to `cmd!`) 
 - [ ] more tests!
 - [ ] add commands for adding and removing users
-- [ ] multiple recipients for secret
 - [ ] Improve README
 - [ ] Logo
