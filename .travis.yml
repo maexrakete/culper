@@ -8,18 +8,39 @@ addons:
 cache: cargo
 rust: nightly
 
-before_cache: |
-    RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
+jobs:
+  include:
+    - stage: prepare
+      script: RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
 
-script:
-- cargo clean
-- cargo build --release
-- cargo test
+    - stage: cleanup
+      script: cargo clean
 
-after_success: |
-    # Uncomment the following line for coveralls.io
-    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+    - stage: run tests
+      script: cargo test
 
+    - stage: test build 
+      script: cargo build 
+
+    - stage: release build 
+      script:
+        - cargo build --release
+        - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+
+stages:
+  - name: prepare
+    if: branch = master
+
+  - cleanup
+
+  - run tests
+
+  - name: test build
+    if: branch != master
+
+  - name: release build
+    if: branch = master
+  
 deploy:
   provider: releases
   api_key:
@@ -28,3 +49,4 @@ deploy:
   skip_cleanup: true
   on:
     tags: true
+    branch: master
