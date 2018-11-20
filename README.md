@@ -14,15 +14,16 @@ During the deployment phase culper then uses gpg to decrypt the values and you c
 Culper comes with following advantages:
 * Passwordless en- & decryption of secrets
 * Stateless deployment of your services (everything is in your yaml)
-* Need secrets for multiple endpoints? Easy, just declare them as recipients
+* *Coming Soon:* Need secrets for multiple endpoints? Easy, just declare them as recipients
 
 ## Todo
 
 - [x] make gpg folder configurable
-- [ ] build dockerfile for server 
 - [ ] Improve & document Setup flow
-- [ ] add commands for adding and removing users
+- [ ] build dockerfile for server 
 - [ ] security audit (e.g. fix passing request signature directly to `cmd!`) 
 - [ ] more tests!
+- [ ] add commands for adding and removing users
+- [ ] multiple recipients for secret
 - [ ] Improve README
 - [ ] Logo

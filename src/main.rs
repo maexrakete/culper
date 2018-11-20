@@ -122,9 +122,13 @@ fn run() -> Result<()> {
         .value_of("gpg_path")
         .unwrap_or_else(|| ".culper_gpg")
         .to_owned();
-    let config = ConfigReader::new(matches.value_of("config"))?.read()?;
+    let config_path = matches
+        .value_of("config")
+        .unwrap_or_else(|| "~/.culper.toml")
+        .to_owned();
     match &matches.subcommand() {
         ("encrypt", Some(sub)) => {
+            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
             let ifile = sub.value_of("file").unwrap(); // clap handles this;
             let mut yml = load_yml(ifile.to_string())?;
             let vals: &str = sub.value_of("value").unwrap();
@@ -134,12 +138,13 @@ fn run() -> Result<()> {
                 true => {
                     println!("Overwriting input file.");
                     let mut output = OpenOptions::new().write(true).open(ifile).unwrap();
-                    write!(output, "{}", serde_yaml::to_string(&yml).unwrap());
+                    write!(output, "{}", serde_yaml::to_string(&yml)?)?;
                 }
-                false => println!("{}", serde_yaml::to_string(&yml).unwrap()),
+                false => println!("{}", serde_yaml::to_string(&yml)?),
             }
         }
         ("decrypt", Some(sub)) => {
+            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
             let ifile = sub.value_of("file").unwrap(); // clap handles this;
             let mut yml = load_yml(ifile.to_string())?;
             let replacefn = |val: &mut String| match vault::parse(val) {
@@ -157,14 +162,15 @@ fn run() -> Result<()> {
             println!("{}", serde_yaml::to_string(&uncrypted_yml)?)
         }
         ("server", _) => {
+            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
             server::run(config, gpg_path)?;
         }
         ("gpg", subcommand) => {
             gpg::handle(subcommand.unwrap(), gpg_path)?;
         }
         ("setup", settings) => match settings {
-            Some(_) => setup::server_setup(gpg_path)?,
-            None => setup::setup(gpg_path)?,
+            Some(_) => setup::server_setup(gpg_path, config_path.to_owned())?,
+            None => setup::setup(gpg_path, config_path.to_owned())?,
         },
         _ => println!("nothing"), // clap handles this
     }

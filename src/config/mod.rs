@@ -8,15 +8,9 @@ use toml;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CulperConfig {
     pub me: UserConfig,
-    pub general: ClientConfig,
     pub targets: Option<()>,
     pub owners: Option<Vec<UserConfig>>,
     pub admins: Option<Vec<UserConfig>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ClientConfig {
-    pub gpg_folder: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -86,15 +80,8 @@ fn get_config_path() -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn create(email: String, id: String, gpg_folder: Option<PathBuf>) -> Result<()> {
-    let gpg_path: Option<String> = match gpg_folder {
-        Some(i) => Some(i.to_str().unwrap().to_string()),
-        None => None,
-    };
+pub fn create(email: String, id: String, config_path: String) -> Result<()> {
     let config = CulperConfig {
-        general: ClientConfig {
-            gpg_folder: gpg_path,
-        },
         me: UserConfig {
             email: email,
             id: id,
@@ -103,7 +90,7 @@ pub fn create(email: String, id: String, gpg_folder: Option<PathBuf>) -> Result<
         owners: None,
         admins: None,
     };
-    File::create(get_config_path()?)?.write(toml::to_string(&config)?.as_bytes());
+    File::create(config_path)?.write(toml::to_string(&config)?.as_bytes());
     Ok(())
 }
 
