@@ -33,7 +33,7 @@ use vault::{EncryptionFormat, OpenableVault, SealableVault, UnsealedVault, Vault
 
 fn app<'a>() -> App<'a, 'a> {
     App::new("culper")
-        .version("0.1.0")
+        .version("0.1.3")
         .author("Max Kiehnscherf")
         .about("Embed crypted values in your yaml")
         .arg(
