@@ -12,7 +12,7 @@ cache: cargo
 jobs:
   include:
     - stage: prepare
-      script: RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
+      script: RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
 
     - stage: cleanup
       script: cargo clean
