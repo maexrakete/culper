@@ -13,12 +13,6 @@ services:
 
 jobs:
   include:
-    - stage: prepare
-      script: RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
-
-    - stage: cleanup
-      script: cargo clean
-
     - name: "run tests"
       stage: quick build
       script: cargo test
@@ -29,15 +23,12 @@ jobs:
 
     - stage: release build 
       script:
+        - cargo clean
+        - RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
         - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
         - bash release-build.sh 
 
 stages:
-  - name: prepare
-    if: branch = master
-
-  - cleanup
-
   - run tests
 
   - name: quick build 
