@@ -30,8 +30,8 @@ jobs:
 
     - stage: release build 
       script:
-        - bash release-build.sh 
         - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+        - bash release-build.sh 
 
 stages:
   - name: prepare
