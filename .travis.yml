@@ -19,7 +19,7 @@ jobs:
 
     - name: "test build"
       stage: quick build
-      script: cargo build 
+      script: cargo build --verbose
 
     - stage: release build 
       script:
@@ -32,10 +32,10 @@ stages:
   - run tests
 
   - name: quick build 
-    if: branch != master
+    if: tag IS blank
 
   - name: release build
-    if: branch = master
+    if: tag IS present
   
 deploy:
   provider: releases
