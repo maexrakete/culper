@@ -7,7 +7,6 @@ addons:
             - libssl-dev
 
 rust: nightly
-cache: cargo
 
 services:
   - docker
