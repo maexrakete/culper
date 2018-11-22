@@ -9,12 +9,12 @@ pub enum EncryptionFormat {
 
 impl EncryptionFormat {
     pub fn as_str(&self) -> String {
-        match self {
-            &EncryptionFormat::GPG_PUB_KEY => String::from("GPG_PUB_KEY"),
+        match *self {
+            EncryptionFormat::GPG_PUB_KEY => String::from("GPG_PUB_KEY"),
         }
     }
-    pub fn from_str(value: &String) -> Result<EncryptionFormat> {
-        match value.as_ref() {
+    pub fn from_str(value: &str) -> Result<EncryptionFormat> {
+        match value {
             "GPG_PUB_KEY" => Ok(EncryptionFormat::GPG_PUB_KEY),
             _ => Err(ErrorKind::RuntimeError(format!(
                 "Unknown encryption format given: {}",
@@ -39,8 +39,8 @@ pub trait SealableVault {
 impl UnsealedVault {
     pub fn new(plain_secret: String, format: EncryptionFormat) -> UnsealedVault {
         UnsealedVault {
-            plain_secret: plain_secret,
-            format: format,
+            plain_secret,
+            format,
         }
     }
 }
@@ -68,10 +68,7 @@ pub trait OpenableVault {
 
 impl SealedVault {
     pub fn new(secret: Vec<u8>, format: EncryptionFormat) -> SealedVault {
-        SealedVault {
-            secret: secret,
-            format: format,
-        }
+        SealedVault { secret, format }
     }
 }
 
@@ -93,7 +90,7 @@ pub trait VaultHandler {
     fn decrypt(&self, SealedVault) -> Result<UnsealedVault>;
 }
 
-pub fn parse(value: &String) -> Result<SealedVault> {
+pub fn parse(value: &str) -> Result<SealedVault> {
     let value_list: Vec<&str> = value.split('.').collect();
     match value_list.as_slice() {
         ["CULPER", encryption_format, secret_bytes] => Ok(SealedVault::new(

@@ -46,7 +46,7 @@ impl ConfigReader {
         }
         let mut raw_toml = String::new();
         File::open(&self.path)?.read_to_string(&mut raw_toml)?;
-        let config = self.read_string_to_config(raw_toml)?;
+        let config = self.read_string_to_config(&raw_toml)?;
         self.config = Some(config.clone());
         Ok(config)
     }
@@ -58,14 +58,14 @@ impl ConfigReader {
     pub fn write(&self) -> Result<()> {
         match &self.config {
             Some(config) => {
-                File::create(&self.path)?.write(toml::to_string(&config)?.as_bytes())?;
+                File::create(&self.path)?.write_all(toml::to_string(&config)?.as_bytes())?;
                 Ok(())
             }
             None => Err(ErrorKind::RuntimeError("No config available to write.".to_owned()).into()),
         }
     }
 
-    fn read_string_to_config(&self, string: String) -> Result<CulperConfig> {
+    fn read_string_to_config(&self, string: &str) -> Result<CulperConfig> {
         let parsed_toml: CulperConfig = toml::from_str(&string)?;
         Ok(parsed_toml)
     }
@@ -83,15 +83,12 @@ fn get_config_path() -> Result<PathBuf> {
 
 pub fn create(email: String, id: String, config_path: String) -> Result<()> {
     let config = CulperConfig {
-        me: UserConfig {
-            email: email,
-            id: id,
-        },
+        me: UserConfig { email, id },
         targets: None,
         owners: None,
         admins: None,
     };
-    File::create(config_path)?.write(toml::to_string(&config)?.as_bytes())?;
+    File::create(config_path)?.write_all(toml::to_string(&config)?.as_bytes())?;
     Ok(())
 }
 

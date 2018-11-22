@@ -14,27 +14,27 @@ pub struct PubKeyVaultHandler {
 }
 
 impl PubKeyVaultHandler {
-    pub fn new(recipient: String, gpg_path: String) -> PubKeyVaultHandler {
+    pub fn new(recipient: &str, gpg_path: &str) -> PubKeyVaultHandler {
         PubKeyVaultHandler {
-            recipient: recipient,
-            gpg_path: gpg_path,
+            recipient: recipient.to_owned(),
+            gpg_path: gpg_path.to_owned(),
         }
     }
 }
 
 impl VaultHandler for PubKeyVaultHandler {
     fn encrypt(&self, open_vault: UnsealedVault) -> Result<SealedVault> {
-        let gpg_manager = GpgManager::new(self.gpg_path.to_owned())?;
+        let gpg_manager = GpgManager::new(&self.gpg_path)?;
         Ok(SealedVault {
-            secret: gpg_manager.encrypt(open_vault.plain_secret, self.recipient.to_owned())?,
+            secret: gpg_manager.encrypt(&open_vault.plain_secret, &self.recipient)?,
             format: open_vault.format,
         })
     }
 
     fn decrypt(&self, open_vault: SealedVault) -> Result<UnsealedVault> {
-        let gpg_manager = GpgManager::new(self.gpg_path.to_owned())?;
+        let gpg_manager = GpgManager::new(&self.gpg_path)?;
         Ok(UnsealedVault {
-            plain_secret: String::from_utf8(gpg_manager.decrypt(open_vault.secret)?).unwrap(),
+            plain_secret: String::from_utf8(gpg_manager.decrypt(&open_vault.secret)?).unwrap(),
             format: open_vault.format,
         })
     }
@@ -45,13 +45,15 @@ pub struct GpgManager {
 }
 
 impl GpgManager {
-    pub fn new(gpg_path: String) -> Result<GpgManager> {
-        Ok(GpgManager { gpg_path: gpg_path })
+    pub fn new(gpg_path: &str) -> Result<GpgManager> {
+        Ok(GpgManager {
+            gpg_path: gpg_path.to_owned(),
+        })
     }
 
     // Takes the armored exported public key and returns either an error or a
     // result containing the ID of the imported key
-    pub fn import_key(&self, gpg_key: String) -> Result<String> {
+    pub fn import_key(&self, gpg_key: &str) -> Result<String> {
         let mut child = Command::new("gpg")
             .arg(format!("--homedir={}", &self.gpg_path))
             .arg("--import")
@@ -76,7 +78,7 @@ impl GpgManager {
         let raw_output = String::from_utf8(output.stderr)?;
         match expr.captures(&raw_output) {
             Some(matches) => {
-                if &matches.len() == &1usize {
+                if matches.len() == 1usize {
                     Ok(matches.get(0).unwrap().as_str().to_string())
                 } else {
                     Err(ErrorKind::RuntimeError(format!(
@@ -115,12 +117,11 @@ impl GpgManager {
         let list = String::from_utf8(process.stdout)?;
         let config_lines: Vec<&str> = list
             .lines()
-            .into_iter()
             .filter(|line| line.starts_with("sec") || line.starts_with("uid"))
             .collect();
         let config_items: Vec<Vec<&str>> = config_lines
             .into_iter()
-            .map(|line| line.split(":").collect())
+            .map(|line| line.split(':').collect())
             .collect();
 
         // TODO: More exhaustive error reporting.
@@ -148,7 +149,7 @@ impl GpgManager {
         }
     }
 
-    pub fn verify(&self, content: String, signature: String) -> Result<bool> {
+    pub fn verify(&self, content: &str, signature: &str) -> Result<bool> {
         let content_file = cmd!("mktemp").read()?;
         let signature_file = cmd!("mktemp").read()?;
         cmd!("echo", &content).stdout(&content_file).run()?;
@@ -181,7 +182,7 @@ impl GpgManager {
         }
     }
 
-    pub fn encrypt(&self, plain: String, recipient: String) -> Result<Vec<u8>> {
+    pub fn encrypt(&self, plain: &str, recipient: &str) -> Result<Vec<u8>> {
         let mut child = Command::new("gpg")
             .arg(format!("--homedir={}", &self.gpg_path))
             .arg("--encrypt")
@@ -212,7 +213,7 @@ impl GpgManager {
         Ok(output.stdout)
     }
 
-    pub fn decrypt(&self, secret: Vec<u8>) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, secret: &[u8]) -> Result<Vec<u8>> {
         let mut child = Command::new("gpg")
             .arg(format!("--homedir={}", &self.gpg_path))
             .arg("--decrypt")
@@ -222,7 +223,7 @@ impl GpgManager {
 
         {
             let stdin = child.stdin.as_mut().expect("Failed to open stdin");
-            stdin.write_all(secret.as_slice())?;
+            stdin.write_all(secret)?;
         }
         let output = child.wait_with_output()?;
         if !output.status.success() {
@@ -237,8 +238,8 @@ impl GpgManager {
     }
 }
 
-pub fn handle(command: &ArgMatches, gpg_path: String) -> Result<()> {
-    let gpg_manager = GpgManager::new(gpg_path)?;
+pub fn handle(command: &ArgMatches, gpg_path: &str) -> Result<()> {
+    let gpg_manager = GpgManager::new(&gpg_path)?;
     match command.subcommand() {
         ("owner", Some(subcommand)) => match subcommand.subcommand_name() {
             Some("add") => {
@@ -246,7 +247,7 @@ pub fn handle(command: &ArgMatches, gpg_path: String) -> Result<()> {
                 let _ = stdout().flush();
                 stdin()
                     .read_to_string(&mut gpg_key)
-                    .map(|_| gpg_manager.import_key(gpg_key))??;
+                    .map(|_| gpg_manager.import_key(&gpg_key))??;
             }
             _ => println!("got nothing"),
         },

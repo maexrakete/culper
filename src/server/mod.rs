@@ -52,12 +52,17 @@ impl FromDataSimple for SignedRequest {
     type Error = ();
     fn from_data(request: &Request, data: Data) -> rocket::data::Outcome<Self, ()> {
         let mut body = String::new();
-        if let Err(_) = data.open().take(1000000).read_to_string(&mut body) {
+        if data
+            .open()
+            .take(1_000_000)
+            .read_to_string(&mut body)
+            .is_err()
+        {
             return Outcome::Failure((Status::InternalServerError, ()));
         }
         match request.headers().get_one("x-req-sig") {
             Some(signature) => Outcome::Success(SignedRequest {
-                body: body,
+                body,
                 signature: signature.to_owned(),
             }),
             _ => Outcome::Failure((Status::Unauthorized, ())),
@@ -77,9 +82,9 @@ fn extract_option_from_rwlock(state: &State<RwLock<Option<String>>>) -> Option<S
     }
 }
 
-fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: String) -> Result<()> {
-    let gpg_manager = GpgManager::new(gpg_config)?;
-    match gpg_manager.import_key(admin.pubkey.to_owned()) {
+fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: &str) -> Result<()> {
+    let gpg_manager = GpgManager::new(&gpg_config)?;
+    match gpg_manager.import_key(&admin.pubkey) {
         Ok(val) => {
             let mut config_reader = ConfigReader::new(None)?;
             let mut config = config_reader.read()?;
@@ -106,6 +111,7 @@ fn update_culperconfig_with_admin(admin: &SetupData, gpg_config: String) -> Resu
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[post("/registeradmin", data = "<admin_data>")]
 fn register_admin(
     key: SetupGuard,
@@ -116,8 +122,8 @@ fn register_admin(
     let secret_key = extract_option_from_rwlock(&secret_lock);
     match (secret_key, key.0) {
         (Some(ref secret), Some(ref header)) => {
-            if secret.to_owned() == header.to_owned() {
-                update_culperconfig_with_admin(&admin_data, gpg_config.to_owned())?;
+            if secret == header {
+                update_culperconfig_with_admin(&admin_data, &gpg_config)?;
                 let mut a = secret_lock.write();
                 println!("Obtained lock, overwriting secret.");
                 *a = None;
@@ -130,20 +136,19 @@ fn register_admin(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[post("/demo", data = "<body>")]
 fn demo(body: SignedRequest, gpg_config: State<String>) -> Result<String> {
-    let gpg_manager = GpgManager::new(gpg_config.to_owned())?;
-    gpg_manager
-        .verify(body.body.to_owned(), body.signature)
-        .unwrap();
+    let gpg_manager = GpgManager::new(&gpg_config.to_owned())?;
+    gpg_manager.verify(&body.body, &body.signature)?;
     Ok(body.body)
 }
 
-pub fn run(config_reader: &mut ConfigReader, gpg_config: String) -> Result<()> {
-    if !config::gpg::has_config(gpg_config.to_owned()) {
-        config::gpg::create_gpg_server_config(gpg_config.to_owned())?;
+pub fn run(config_reader: &mut ConfigReader, gpg_config: &str) -> Result<()> {
+    if !config::gpg::has_config(&gpg_config) {
+        config::gpg::create_gpg_server_config(gpg_config)?;
 
-        let user_config = GpgManager::new(gpg_config.to_owned())?.parse_private_key()?;
+        let user_config = GpgManager::new(gpg_config)?.parse_private_key()?;
         config_reader.update(CulperConfig {
             me: user_config,
             admins: None,
@@ -158,10 +163,19 @@ pub fn run(config_reader: &mut ConfigReader, gpg_config: String) -> Result<()> {
 
     let config = match &config_reader.config {
         Some(val) => Ok(val.to_owned()),
-        None => Err(ErrorKind::RuntimeError(format!("fkbr"))),
+        None => Err(ErrorKind::RuntimeError(
+            r#"
+          For some reason the presence of a config file was assumed but none found.
+          This might be the result of an error during initialization. Consider
+          removing your existing configuration or create one manually.
+
+          Normally this should not happen.
+        "#
+            .to_string(),
+        )),
     };
 
-    let secret = if let None = config?.admins {
+    let secret = if config?.admins.is_none() {
         let secret = Uuid::new_v4().to_simple().to_string();
         println!(
             "{}",

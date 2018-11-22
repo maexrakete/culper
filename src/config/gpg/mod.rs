@@ -6,31 +6,31 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process::Command;
 
-fn create_gpg_folder(gpg_path: String) -> Result<()> {
-    Command::new("mkdir")
-        .arg(format!("{}", gpg_path))
-        .output()
-        .or_else(|i| {
-            Err(ErrorKind::RuntimeError(
-                format!("Could not create config folder: {}", i).to_owned(),
-            ))
-        })?;
+fn create_gpg_folder(gpg_path: &str) -> Result<()> {
+    Command::new("mkdir").arg(gpg_path).output().or_else(|i| {
+        Err(ErrorKind::RuntimeError(
+            format!("Could not create config folder: {}", i).to_owned(),
+        ))
+    })?;
     Ok(())
 }
 
 fn create_gpg_batch_file() -> Result<()> {
     let command = include_str!("../../shell/gpg_config");
-    let mut file = File::create("foo").or(Err(ErrorKind::RuntimeError(
-        "Could not create GPG config file.".to_owned(),
-    )))?;
-    file.write_all(command.to_owned().as_bytes())
-        .or(Err(ErrorKind::RuntimeError(
+    let mut file = File::create("foo").or_else(|_| {
+        Err(ErrorKind::RuntimeError(
+            "Could not create GPG config file.".to_owned(),
+        ))
+    })?;
+    file.write_all(command.to_owned().as_bytes()).or_else(|_| {
+        Err(ErrorKind::RuntimeError(
             "Could not write to GPG config file.".to_owned(),
-        )))?;
+        ))
+    })?;
     Ok(())
 }
 
-fn create_gpg_keys(gpg_path: String) -> Result<()> {
+fn create_gpg_keys(gpg_path: &str) -> Result<()> {
     let command = Command::new("gpg")
         .arg(format!("--homedir={}", gpg_path))
         .arg("--batch")
@@ -52,7 +52,7 @@ fn create_gpg_keys(gpg_path: String) -> Result<()> {
     Ok(())
 }
 
-fn export_pubkey(gpg_path: String) -> Result<String> {
+fn export_pubkey(gpg_path: &str) -> Result<String> {
     let output = Command::new("gpg")
         .arg(format!("--homedir={}", gpg_path))
         .arg("--armor")
@@ -74,27 +74,31 @@ fn export_pubkey(gpg_path: String) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?)
 }
 
-pub fn create_gpg_config(gpg_path: String) -> Result<()> {
-    create_gpg_folder(gpg_path)?;
+pub fn create_gpg_config(gpg_path: &str) -> Result<()> {
+    create_gpg_folder(&gpg_path)?;
     Ok(())
 }
 
-pub fn create_gpg_server_config(gpg_path: String) -> Result<()> {
-    create_gpg_folder(gpg_path.to_owned())?;
+pub fn create_gpg_server_config(gpg_path: &str) -> Result<()> {
+    create_gpg_folder(gpg_path)?;
     create_gpg_batch_file()?;
-    create_gpg_keys(gpg_path.to_owned())?;
+    create_gpg_keys(gpg_path)?;
     DirBuilder::new().create("public")?;
 
-    export_pubkey(gpg_path.to_owned())
+    export_pubkey(gpg_path)
         .and_then(|key| {
             File::create("public/pubkey.asc")
-                .or(Err(ErrorKind::RuntimeError(
-                    "Could not create public key-file.".to_owned(),
-                )))?
+                .or_else(|_| {
+                    Err(ErrorKind::RuntimeError(
+                        "Could not create public key-file.".to_owned(),
+                    ))
+                })?
                 .write_all(key.to_owned().as_bytes())
-                .or(Err(ErrorKind::RuntimeError(
-                    "Could not write to public key-file.".to_owned(),
-                )))?;
+                .or_else(|_| {
+                    Err(ErrorKind::RuntimeError(
+                        "Could not write to public key-file.".to_owned(),
+                    ))
+                })?;
             Ok(())
         })
         .and_then(|_| {
@@ -109,7 +113,7 @@ pub fn create_gpg_server_config(gpg_path: String) -> Result<()> {
     Ok(())
 }
 
-pub fn has_config(gpg_path: String) -> bool {
+pub fn has_config(gpg_path: &str) -> bool {
     Path::new("public/pubkey.asc").exists()
         && Path::new(&OsString::from(format!("{}/pubring.kbx", gpg_path))).exists()
 }
