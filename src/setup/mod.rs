@@ -15,7 +15,7 @@ pub fn setup(gpg_path: String, config_path: String) -> Result<()> {
         .map(|_| gpg_manager.import_key(me_key))??;
 
     let user_config = gpg_manager.parse_private_key()?;
-    create(user_config.email, user_config.id, config_path);
+    create(user_config.email, user_config.id, config_path)?;
 
     Ok(())
 }
@@ -24,6 +24,6 @@ pub fn server_setup(gpg_config: String, config_path: String) -> Result<()> {
     create_gpg_server_config(gpg_config.to_owned())?;
     let gpg_manager = GpgManager::new(gpg_config.to_owned())?;
     let server_config = gpg_manager.parse_private_key()?;
-    create(server_config.email, server_config.id, config_path);
+    create(server_config.email, server_config.id, config_path)?;
     Ok(())
 }

@@ -91,7 +91,7 @@ pub fn create(email: String, id: String, config_path: String) -> Result<()> {
         owners: None,
         admins: None,
     };
-    File::create(config_path)?.write(toml::to_string(&config)?.as_bytes());
+    File::create(config_path)?.write(toml::to_string(&config)?.as_bytes())?;
     Ok(())
 }
 
