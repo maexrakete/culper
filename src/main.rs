@@ -38,7 +38,7 @@ fn app<'a>() -> App<'a, 'a> {
         .about("Embed crypted values in your yaml")
         .arg(
             Arg::with_name("config")
-                .long("config")
+                .long("config_file")
                 .help("Sets path to config file")
                 .takes_value(true),
         )
@@ -162,8 +162,8 @@ fn run() -> Result<()> {
             println!("{}", serde_yaml::to_string(&uncrypted_yml)?)
         }
         ("server", _) => {
-            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
-            server::run(config, gpg_path)?;
+            let mut config_reader = ConfigReader::new(matches.value_of("config"))?;
+            server::run(&mut config_reader, gpg_path)?;
         }
         ("gpg", subcommand) => {
             gpg::handle(subcommand.unwrap(), gpg_path)?;

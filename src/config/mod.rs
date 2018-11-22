@@ -36,10 +36,11 @@ impl ConfigReader {
             config: None,
         })
     }
+
     pub fn read(&mut self) -> Result<CulperConfig> {
         if !&self.path.exists() {
             return Err(ErrorKind::UserError(
-                "culper.toml not found. Create one or pass the --config option.".to_owned(),
+                "culper.toml not found. Create one or pass the --config_file option.".to_owned(),
             )
             .into());
         }
@@ -54,10 +55,10 @@ impl ConfigReader {
         self.config = Some(new_config);
     }
 
-    pub fn write(self) -> Result<()> {
-        match self.config {
+    pub fn write(&self) -> Result<()> {
+        match &self.config {
             Some(config) => {
-                File::create(get_config_path()?)?.write(toml::to_string(&config)?.as_bytes())?;
+                File::create(&self.path)?.write(toml::to_string(&config)?.as_bytes())?;
                 Ok(())
             }
             None => Err(ErrorKind::RuntimeError("No config available to write.".to_owned()).into()),

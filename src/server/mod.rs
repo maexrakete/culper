@@ -139,11 +139,29 @@ fn demo(body: SignedRequest, gpg_config: State<String>) -> Result<String> {
     Ok(body.body)
 }
 
-pub fn run(config: CulperConfig, gpg_config: String) -> Result<()> {
+pub fn run(config_reader: &mut ConfigReader, gpg_config: String) -> Result<()> {
     if !config::gpg::has_config(gpg_config.to_owned()) {
         config::gpg::create_gpg_server_config(gpg_config.to_owned())?;
+
+        let user_config = GpgManager::new(gpg_config.to_owned())?.parse_private_key()?;
+        config_reader.update(CulperConfig {
+            me: user_config,
+            admins: None,
+            owners: None,
+            targets: None,
+        });
+
+        config_reader.write()?;
+    } else {
+        config_reader.read()?;
     }
-    let secret = if let None = config.admins {
+
+    let config = match &config_reader.config {
+        Some(val) => Ok(val.to_owned()),
+        None => Err(ErrorKind::RuntimeError(format!("fkbr"))),
+    };
+
+    let secret = if let None = config?.admins {
         let secret = Uuid::new_v4().to_simple().to_string();
         println!(
             "{}",

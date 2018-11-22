@@ -106,7 +106,6 @@ pub fn create_gpg_server_config(gpg_path: String) -> Result<()> {
                 Ok(())
             })
         })?;
-
     Ok(())
 }
 
