@@ -16,15 +16,13 @@ extern crate regex;
 extern crate uuid;
 #[macro_use]
 extern crate rocket;
+extern crate duct;
 extern crate parking_lot;
 extern crate rocket_contrib;
-#[macro_use]
-extern crate duct;
 
 use clap::{App, Arg, SubCommand};
 use config::{ConfigReader, CulperConfig};
 use errors::*;
-use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
@@ -215,7 +213,6 @@ fn encrypt_yml(
     Ok(())
 }
 
-mod aes;
 mod config;
 mod errors;
 mod gpg;

@@ -2,6 +2,7 @@ use base64::{decode, encode};
 use errors::*;
 
 #[derive(Debug)]
+#[allow(non_camel_case_types)]
 pub enum EncryptionFormat {
     GPG_PUB_KEY,
 }

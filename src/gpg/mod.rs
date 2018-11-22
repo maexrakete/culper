@@ -5,7 +5,6 @@ use errors::*;
 use regex::Regex;
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use vault::{SealedVault, UnsealedVault, VaultHandler};
 
@@ -236,16 +235,6 @@ impl GpgManager {
         };
         Ok(output.stdout)
     }
-}
-
-fn get_config_path() -> Result<PathBuf> {
-    let mut path = PathBuf::new();
-    match dirs::home_dir() {
-        Some(home) => path.push(home),
-        None => path.push("./"),
-    };
-    path.push(".culper_gpg");
-    Ok(path)
 }
 
 pub fn handle(command: &ArgMatches, gpg_path: String) -> Result<()> {
