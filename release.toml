@@ -1,1 +1,0 @@
-pre-release-replacements = [ {file="src/main.rs", search="<VERSION>", replace="{{version}}"} ]

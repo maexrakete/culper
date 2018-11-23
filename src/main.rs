@@ -2,6 +2,7 @@
 #![feature(decl_macro)]
 
 extern crate base64;
+#[macro_use]
 extern crate clap;
 extern crate crypto;
 extern crate dirs;
@@ -28,10 +29,9 @@ use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 use std::str;
 use vault::{EncryptionFormat, OpenableVault, SealableVault, UnsealedVault, VaultHandler};
-
 fn app<'a>() -> App<'a, 'a> {
     App::new("culper")
-        .version("0.1.3")
+        .version(crate_version!())
         .author("Max Kiehnscherf")
         .about("Embed crypted values in your yaml")
         .arg(
