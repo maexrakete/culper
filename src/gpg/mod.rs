@@ -190,6 +190,7 @@ impl GpgManager {
             .arg(recipient)
             .arg("--always-trust")
             .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
 
@@ -209,7 +210,6 @@ impl GpgManager {
             ))
             .into());
         };
-        println!("{:?}", output);
         Ok(output.stdout)
     }
 

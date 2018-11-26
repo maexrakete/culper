@@ -1,39 +1,6 @@
 use errors::*;
 use serde_yaml::{Mapping, Value};
 
-pub fn find_node<'a>(value: &'a mut Value, node_tree: &[&str]) -> Result<&'a mut Value> {
-    match node_tree.split_first() {
-        Some((head, tail)) if !tail.is_empty() => match value
-            .as_mapping_mut()
-            .unwrap()
-            .get_mut(&Value::String(head.to_string()))
-        {
-            Some(result) => find_node(result, &tail.to_vec()),
-            None => Err(ErrorKind::RuntimeError(format!("Key `{}` not found", head)).into()),
-        },
-        Some((_, tail)) if !tail.is_empty() => Ok(value),
-        _ => Err(ErrorKind::RuntimeError("Unknown Error".to_owned()).into()),
-    }
-}
-
-fn replace(value: &mut Value, key: String, replace: String) {
-    if value.is_mapping() {
-        let mapping = value.as_mapping_mut().unwrap();
-        mapping.remove(&Value::String(key.clone()));
-        mapping.insert(Value::String(key), Value::String(replace));
-    }
-}
-
-pub fn replace_value(value: &mut Value, node_tree: &[&str], replace_str: String) {
-    match &(*node_tree).split_last() {
-        Some((last, _)) => match find_node(value, node_tree) {
-            Ok(node) => replace(node, last.to_string(), replace_str),
-            Err(e) => println!("{}", e),
-        },
-        None => println!("..."),
-    }
-}
-
 pub fn traverse_yml<'a, F>(value: &'a Mapping, f: &F) -> Result<Mapping>
 where
     F: Fn(&mut String) -> Result<Option<String>>,

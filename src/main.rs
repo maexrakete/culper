@@ -4,7 +4,6 @@
 extern crate base64;
 #[macro_use]
 extern crate clap;
-extern crate crypto;
 extern crate dirs;
 extern crate rand;
 #[macro_use]
@@ -17,18 +16,25 @@ extern crate regex;
 extern crate uuid;
 #[macro_use]
 extern crate rocket;
+extern crate actix;
+extern crate actix_web;
 extern crate duct;
+#[macro_use]
+extern crate futures;
 extern crate parking_lot;
 extern crate rocket_contrib;
+extern crate url;
 
-use clap::{App, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, SubCommand};
 use config::{ConfigReader, CulperConfig};
 use errors::*;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
+use std::path::PathBuf;
 use std::str;
 use vault::{EncryptionFormat, OpenableVault, SealableVault, UnsealedVault, VaultHandler};
+
 fn app<'a>() -> App<'a, 'a> {
     App::new("culper")
         .version(crate_version!())
@@ -46,32 +52,7 @@ fn app<'a>() -> App<'a, 'a> {
                 .help("Sets path to gpg folder")
                 .takes_value(true),
         )
-        .subcommand(
-            SubCommand::with_name("encrypt")
-                .arg(
-                    Arg::with_name("value")
-                        .short("v")
-                        .long("value")
-                        .help("YAML path which should be encrypted")
-                        .required(true)
-                        .takes_value(true),
-                )
-                .arg(
-                    Arg::with_name("overwrite")
-                        .short("o")
-                        .long("overwrite")
-                        .help("Overwrites input file")
-                        .takes_value(false),
-                )
-                .arg(
-                    Arg::with_name("file")
-                        .short("f")
-                        .long("file")
-                        .help("Sets input file")
-                        .takes_value(true)
-                        .required(true),
-                ),
-        )
+        .subcommand(SubCommand::with_name("encrypt"))
         .subcommand(
             SubCommand::with_name("decrypt").arg(
                 Arg::with_name("file")
@@ -80,6 +61,17 @@ fn app<'a>() -> App<'a, 'a> {
                     .help("Sets input file")
                     .takes_value(true)
                     .required(true),
+            ),
+        )
+        .subcommand(
+            SubCommand::with_name("target").subcommand(
+                SubCommand::with_name("add")
+                    .arg(
+                        Arg::with_name("as_admin")
+                            .long("as_admin")
+                            .takes_value(true),
+                    )
+                    .setting(AppSettings::AllowExternalSubcommands),
             ),
         )
         .subcommand(SubCommand::with_name("server"))
@@ -117,25 +109,26 @@ fn run() -> Result<()> {
         .value_of("gpg_path")
         .unwrap_or_else(|| ".culper_gpg")
         .to_owned();
-    let config_path = matches
-        .value_of("config")
-        .unwrap_or_else(|| "~/.culper.toml")
-        .to_owned();
-    match &matches.subcommand() {
-        ("encrypt", Some(sub)) => {
-            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
-            let ifile = sub.value_of("file").unwrap(); // clap handles this;
-            let mut yml = load_yml(ifile.to_string())?;
-            let vals: &str = sub.value_of("value").unwrap();
-            encrypt_yml(&mut yml, &vals, &config, &gpg_path)?;
+    let config_path = match matches.value_of("config") {
+        Some(config) => config.to_owned(),
+        None => get_config_path()?,
+    };
 
-            if sub.is_present("overwrite") {
-                println!("Overwriting input file.");
-                let mut output = OpenOptions::new().write(true).open(ifile).unwrap();
-                write!(output, "{}", serde_yaml::to_string(&yml)?)?;
-            } else {
-                println!("{}", serde_yaml::to_string(&yml)?);
-            }
+    match &matches.subcommand() {
+        ("encrypt", _) => {
+            let config = ConfigReader::new(matches.value_of("config"))?.read()?;
+            let encrypted_value = encrypt_value(&config, &gpg_path)?;
+            println!(
+                "{}",
+                format!(
+                    r#"
+            Replace the desired key with this value:
+
+{}
+            "#,
+                    encrypted_value
+                )
+            );
         }
         ("decrypt", Some(sub)) => {
             let config = ConfigReader::new(matches.value_of("config"))?.read()?;
@@ -161,6 +154,11 @@ fn run() -> Result<()> {
         ("gpg", subcommand) => {
             gpg::handle(subcommand.unwrap(), &gpg_path)?;
         }
+        ("target", subcommand) => client::target::handle(
+            subcommand.unwrap(),
+            gpg_path.to_owned(),
+            config_path.to_owned(),
+        )?,
         ("setup", settings) => match settings {
             Some(_) => setup::server_setup(&gpg_path, &config_path)?,
             None => setup::setup(&gpg_path, &config_path)?,
@@ -189,13 +187,8 @@ fn main() {
     ::std::process::exit(0);
 }
 
-fn encrypt_yml(
-    yml: &mut serde_yaml::Value,
-    path: &str,
-    culper_config: &CulperConfig,
-    gpg_path: &str,
-) -> Result<()> {
-    eprint!("Enter value for {} to encrypt: ", path);
+fn encrypt_value(culper_config: &CulperConfig, gpg_path: &str) -> Result<String> {
+    eprint!("Enter value to encrypt: ");
     let _ = stdout().flush();
     let vault_handler = gpg::PubKeyVaultHandler::new(&culper_config.me.id, &gpg_path);
     let mut value = String::new();
@@ -203,12 +196,29 @@ fn encrypt_yml(
 
     let vault = UnsealedVault::new(value.trim_right().to_owned(), EncryptionFormat::GPG_PUB_KEY)
         .seal(&|vault| vault_handler.encrypt(vault))?;
-    let node_tree: Vec<&str> = path.split('.').collect();
-    yaml::replace_value(yml, node_tree.as_slice(), vault.to_string());
 
-    Ok(())
+    Ok(vault.to_string())
 }
 
+fn get_config_path() -> Result<String> {
+    let mut path = PathBuf::new();
+    match dirs::home_dir() {
+        Some(home) => path.push(home),
+        None => path.push("./"),
+    };
+    path.push(".culper.toml");
+    path.to_str().map_or_else(
+        || {
+            Err(ErrorKind::RuntimeError(
+                "There was an error deriving the config path. Consider passing one manually."
+                    .to_owned(),
+            )
+            .into())
+        },
+        |path_str| Ok(path_str.to_owned()),
+    )
+}
+mod client;
 mod config;
 mod errors;
 mod gpg;

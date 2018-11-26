@@ -8,7 +8,7 @@ use toml;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CulperConfig {
     pub me: UserConfig,
-    pub targets: Option<()>,
+    pub targets: Option<Vec<TargetConfig>>,
     pub owners: Option<Vec<UserConfig>>,
     pub admins: Option<Vec<UserConfig>>,
 }
@@ -17,6 +17,12 @@ pub struct CulperConfig {
 pub struct UserConfig {
     pub id: String,
     pub email: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TargetConfig {
+    pub id: String,
+    pub host: String,
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +37,7 @@ impl ConfigReader {
             Some(val) => PathBuf::from(val),
             None => get_config_path()?,
         };
+        println!("Config: {:?}", config_path);
         Ok(ConfigReader {
             path: config_path,
             config: None,
@@ -49,6 +56,29 @@ impl ConfigReader {
         let config = self.read_string_to_config(&raw_toml)?;
         self.config = Some(config.clone());
         Ok(config)
+    }
+
+    pub fn add_target(&mut self, host: &str, id: &str) -> Result<()> {
+        match &mut self.config {
+            Some(ref mut config) => match config.targets {
+                None => {
+                    config.targets = Some(vec![TargetConfig {
+                        host: host.to_owned(),
+                        id: id.to_owned(),
+                    }]);
+                    Ok(())
+                }
+                Some(ref mut targets) => {
+                    targets.push(TargetConfig {
+                        host: host.to_owned(),
+                        id: id.to_owned(),
+                    });
+
+                    Ok(())
+                }
+            },
+            None => Err(ErrorKind::RuntimeError("Config is not set.".to_owned()).into()),
+        }
     }
 
     pub fn update(&mut self, new_config: CulperConfig) {
