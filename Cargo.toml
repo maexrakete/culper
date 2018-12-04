@@ -22,9 +22,6 @@ uuid = { version = "0.7", features = ["v4"] }
 parking_lot = "0.6.4"
 duct = "0.11.1"
 url = "1.7.2"
-actix = "0.7.3"
-futures = "0.1"
-
-[dependencies.actix-web]
-version = "0.7.4"
-features = ["ssl", "tls"]
+futures = "0.1.25"
+lazy_static = "1.2.0"
+reqwest = "0.9.5"
