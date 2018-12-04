@@ -69,10 +69,10 @@ impl FromDataSimple for SignedRequest {
         }
     }
 }
-#[derive(Deserialize, Debug)]
-struct SetupData {
-    email: String,
-    pubkey: String,
+#[derive(Deserialize, Serialize, Debug)]
+pub struct SetupData {
+    pub email: String,
+    pub pubkey: String,
 }
 
 fn extract_option_from_rwlock(state: &State<RwLock<Option<String>>>) -> Option<String> {

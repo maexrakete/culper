@@ -5,18 +5,21 @@ use errors::*;
 use regex::Regex;
 use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
+use std::iter::Extend;
 use std::process::{Command, Stdio};
 use vault::{SealedVault, UnsealedVault, VaultHandler};
 
 pub struct PubKeyVaultHandler {
-    recipient: String,
+    signer: String,
+    recipients: Vec<String>,
     gpg_path: String,
 }
 
 impl PubKeyVaultHandler {
-    pub fn new(recipient: &str, gpg_path: &str) -> PubKeyVaultHandler {
+    pub fn new(signer: &str, recipients: &[String], gpg_path: &str) -> PubKeyVaultHandler {
         PubKeyVaultHandler {
-            recipient: recipient.to_owned(),
+            signer: signer.to_owned(),
+            recipients: recipients.to_vec(),
             gpg_path: gpg_path.to_owned(),
         }
     }
@@ -26,7 +29,11 @@ impl VaultHandler for PubKeyVaultHandler {
     fn encrypt(&self, open_vault: UnsealedVault) -> Result<SealedVault> {
         let gpg_manager = GpgManager::new(&self.gpg_path)?;
         Ok(SealedVault {
-            secret: gpg_manager.encrypt(&open_vault.plain_secret, &self.recipient)?,
+            secret: gpg_manager.encrypt(
+                &open_vault.plain_secret,
+                &self.signer,
+                &self.recipients.clone().into_iter().collect::<Vec<String>>(),
+            )?,
             format: open_vault.format,
         })
     }
@@ -182,26 +189,61 @@ impl GpgManager {
         }
     }
 
-    pub fn encrypt(&self, plain: &str, recipient: &str) -> Result<Vec<u8>> {
+    pub fn sign(&self, payload: &str) -> Result<Vec<u8>> {
         let mut child = Command::new("gpg")
             .arg(format!("--homedir={}", &self.gpg_path))
-            .arg("--encrypt")
-            .arg("-r")
-            .arg(recipient)
-            .arg("--always-trust")
+            .arg("--import")
             .stdin(Stdio::piped())
-            .stderr(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()?;
-
         {
-            let stdin = child
-                .stdin
-                .as_mut()
-                .expect("Could not read from child process.");
-            stdin.write_all(plain.as_bytes())?;
+            let stdin = child.stdin.as_mut().expect("Failed to open stdin");
+            stdin.write_all(payload.as_bytes())?;
         }
-        let output = child.wait_with_output()?;
+        let output = child.wait_with_output().expect("Failed to read stdout");
+        if !output.status.success() {
+            return Err(ErrorKind::RuntimeError(format!(
+                "Key was not imported. Error: [{}]: {}",
+                output.status,
+                String::from_utf8(output.stderr)?
+            ))
+            .into());
+        };
+
+        if !output.status.success() {
+            return Err(ErrorKind::RuntimeError(format!(
+                "Could not sign payload. Error: [{}]: {}",
+                output.status,
+                String::from_utf8(output.stderr)?
+            ))
+            .into());
+        };
+        Ok(output.stdout)
+    }
+
+    pub fn pubkey_for_id(&self, id: &str) -> Result<String> {
+        Ok(cmd!("gpg", "--export", "--armor", id).read()?)
+    }
+
+    pub fn encrypt(&self, plain: &str, _signer: &str, recipients: &Vec<String>) -> Result<Vec<u8>> {
+        let mut command: Vec<String> = vec![
+            format!("--homedir={}", &self.gpg_path),
+            "--encrypt".to_owned(),
+            "--always-trust".to_owned(),
+            "--sign".to_owned(),
+            "-r".to_owned(),
+        ];
+
+        command.extend(recipients.clone());
+
+        let output = cmd("gpg", command)
+            .stderr_capture()
+            .stdout_capture()
+            .unchecked()
+            .input(plain.as_bytes())
+            .run()?;
+
         if !output.status.success() {
             return Err(ErrorKind::RuntimeError(format!(
                 "Could not encrypt secret. Error: [{}]: {}",

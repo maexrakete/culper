@@ -22,5 +22,6 @@ error_chain!{
     SerdeYml(::serde_yaml::Error);
     Base64Decode(::base64::DecodeError);
     UrlParse(::url::ParseError);
+    ReqwestError(::reqwest::Error);
   }
 }

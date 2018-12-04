@@ -7,9 +7,9 @@ use std::path::Path;
 use std::process::Command;
 
 fn create_gpg_folder(gpg_path: &str) -> Result<()> {
-    Command::new("mkdir").arg(gpg_path).output().or_else(|i| {
+    fs::create_dir_all(gpg_path).or_else(|i| {
         Err(ErrorKind::RuntimeError(
-            format!("Could not create config folder: {}", i).to_owned(),
+            format!(r#"Could not create config folder "{}": {}"#, gpg_path, i).to_owned(),
         ))
     })?;
     Ok(())
@@ -116,4 +116,25 @@ pub fn create_gpg_server_config(gpg_path: &str) -> Result<()> {
 pub fn has_config(gpg_path: &str) -> bool {
     Path::new("public/pubkey.asc").exists()
         && Path::new(&OsString::from(format!("{}/pubring.kbx", gpg_path))).exists()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn can_create_gpg_config_folder() {
+        create_gpg_folder(".culper_gpg").unwrap();
+        assert!(Path::new(".culper_gpg").exists());
+
+        create_gpg_folder("nested/gpg/culper_gpg").unwrap();
+        assert!(Path::new("nested/gpg/culper_gpg").exists());
+    }
+
+    #[test]
+    fn cleanup() {
+        ::duct::cmd!("rm", "-rf", "nested", ".culper_gpg")
+            .run()
+            .expect("This test should only fail if one of the previous test failed");
+    }
 }
