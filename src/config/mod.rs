@@ -1,7 +1,9 @@
 use dirs;
 use errors::*;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::path::Path;
 use std::path::PathBuf;
 use toml;
 
@@ -88,7 +90,11 @@ impl ConfigReader {
     pub fn write(&self) -> Result<()> {
         match &self.config {
             Some(config) => {
-                File::create(&self.path)?.write_all(toml::to_string(&config)?.as_bytes())?;
+                OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .open(&self.path)?
+                    .write_all(toml::to_string(&config)?.as_bytes())?;
                 Ok(())
             }
             None => Err(ErrorKind::RuntimeError("No config available to write.".to_owned()).into()),
@@ -123,3 +129,52 @@ pub fn create(email: String, id: String, config_path: String) -> Result<()> {
 }
 
 pub mod gpg;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_create_config() {
+        create(
+            "test@test.de".to_owned(),
+            "12345678".to_owned(),
+            "./culper.toml".to_owned(),
+        )
+        .unwrap();
+        assert!(Path::new("./culper.toml").exists());
+    }
+
+    #[test]
+    fn can_update_existing_config() {
+        let mut config_reader = ConfigReader::new(Some("./culper.toml")).unwrap();
+
+        config_reader.update(CulperConfig {
+            me: UserConfig {
+                email: "overwrite@mail.de".to_owned(),
+                id: "87654321".to_owned(),
+            },
+            targets: None,
+            owners: None,
+            admins: None,
+        });
+
+        config_reader
+            .add_target("www.test.de", "alskjdflsajfd")
+            .unwrap();
+        config_reader.write().unwrap();
+
+        let mut file = OpenOptions::new().read(true).open("./culper.toml").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        assert_eq!(contents, ::toml::to_string(&config_reader.config).unwrap())
+    }
+
+    #[test]
+    fn cleanup() {
+        ::duct::cmd!("rm", "-rf", ".culper.toml")
+            .run()
+            .expect("This test should only fail if one of the previous test failed");
+    }
+}

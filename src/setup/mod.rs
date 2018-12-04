@@ -6,6 +6,7 @@ use std::io::prelude::*;
 use std::io::{stdin, stdout, Write};
 
 pub fn setup(gpg_path: &str, config_path: &str) -> Result<()> {
+    println!("Creating config");
     create_gpg_config(gpg_path)?;
     let mut me_key = String::new();
     let _ = stdout().flush();
@@ -21,6 +22,7 @@ pub fn setup(gpg_path: &str, config_path: &str) -> Result<()> {
 }
 
 pub fn server_setup(gpg_config: &str, config_path: &str) -> Result<()> {
+    println!("Creating server config");
     create_gpg_server_config(gpg_config)?;
     let gpg_manager = GpgManager::new(&gpg_config.to_owned())?;
     let server_config = gpg_manager.parse_private_key()?;

@@ -16,16 +16,16 @@ extern crate regex;
 extern crate uuid;
 #[macro_use]
 extern crate rocket;
-extern crate actix;
-extern crate actix_web;
 extern crate duct;
 #[macro_use]
+extern crate lazy_static;
 extern crate futures;
 extern crate parking_lot;
+extern crate reqwest;
 extern crate rocket_contrib;
 extern crate url;
 
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use config::{ConfigReader, CulperConfig};
 use errors::*;
 use std::fs::File;
@@ -34,6 +34,10 @@ use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 use std::str;
 use vault::{EncryptionFormat, OpenableVault, SealableVault, UnsealedVault, VaultHandler};
+
+lazy_static! {
+    static ref matches: ArgMatches<'static> = app().get_matches();
+}
 
 fn app<'a>() -> App<'a, 'a> {
     App::new("culper")
@@ -76,8 +80,12 @@ fn app<'a>() -> App<'a, 'a> {
         )
         .subcommand(SubCommand::with_name("server"))
         .subcommand(
-            SubCommand::with_name("setup")
-                .arg(Arg::with_name("sever").help("Generate server settings")),
+            SubCommand::with_name("setup").arg(
+                Arg::with_name("server")
+                    .long("server")
+                    .help("Generate server settings")
+                    .takes_value(false),
+            ),
         )
         .subcommand(
             SubCommand::with_name("gpg")
@@ -104,11 +112,11 @@ fn load_yml(file_path: String) -> Result<serde_yaml::Value> {
 }
 
 fn run() -> Result<()> {
-    let matches = app().get_matches();
-    let gpg_path = matches
-        .value_of("gpg_path")
-        .unwrap_or_else(|| ".culper_gpg")
-        .to_owned();
+    let gpg_path = match matches.value_of("gpg_path") {
+        Some(gpg) => gpg.to_owned(),
+        None => get_gpg_path()?,
+    };
+
     let config_path = match matches.value_of("config") {
         Some(config) => config.to_owned(),
         None => get_config_path()?,
@@ -137,7 +145,17 @@ fn run() -> Result<()> {
             let replacefn = |val: &mut String| match vault::parse(val) {
                 Ok(d) => match d.format {
                     EncryptionFormat::GPG_PUB_KEY => {
-                        let vault_handler = gpg::PubKeyVaultHandler::new(&config.me.id, &gpg_path);
+                        let vault_handler = gpg::PubKeyVaultHandler::new(
+                            &config.me.id,
+                            &config
+                                .clone()
+                                .targets
+                                .unwrap_or_else(|| vec![])
+                                .into_iter()
+                                .map(|target| target.id)
+                                .collect::<Vec<String>>(),
+                            &gpg_path,
+                        );
                         let vault = d.unseal(&|vault| vault_handler.decrypt(vault))?;
                         Ok(Some(vault.plain_secret))
                     }
@@ -159,10 +177,13 @@ fn run() -> Result<()> {
             gpg_path.to_owned(),
             config_path.to_owned(),
         )?,
-        ("setup", settings) => match settings {
-            Some(_) => setup::server_setup(&gpg_path, &config_path)?,
-            None => setup::setup(&gpg_path, &config_path)?,
-        },
+        ("setup", Some(settings)) => {
+            if settings.is_present("server") {
+                setup::server_setup(&gpg_path, &config_path)?;
+            } else {
+                setup::setup(&gpg_path, &config_path)?;
+            }
+        }
         _ => println!("nothing"), // clap handles this
     }
     Ok(())
@@ -190,7 +211,17 @@ fn main() {
 fn encrypt_value(culper_config: &CulperConfig, gpg_path: &str) -> Result<String> {
     eprint!("Enter value to encrypt: ");
     let _ = stdout().flush();
-    let vault_handler = gpg::PubKeyVaultHandler::new(&culper_config.me.id, &gpg_path);
+    let vault_handler = gpg::PubKeyVaultHandler::new(
+        &culper_config.me.id,
+        &culper_config
+            .clone()
+            .targets
+            .unwrap_or_else(|| vec![])
+            .into_iter()
+            .map(|target| target.id)
+            .collect::<Vec<String>>(),
+        &gpg_path,
+    );
     let mut value = String::new();
     stdin().read_line(&mut value)?;
 
@@ -198,6 +229,25 @@ fn encrypt_value(culper_config: &CulperConfig, gpg_path: &str) -> Result<String>
         .seal(&|vault| vault_handler.encrypt(vault))?;
 
     Ok(vault.to_string())
+}
+
+fn get_gpg_path() -> Result<String> {
+    let mut path = PathBuf::new();
+    match dirs::home_dir() {
+        Some(home) => path.push(home),
+        None => path.push("./"),
+    };
+    path.push(".culper_gpg");
+    path.to_str().map_or_else(
+        || {
+            Err(ErrorKind::RuntimeError(
+                "There was an error deriving the gpg path. Consider passing one manually."
+                    .to_owned(),
+            )
+            .into())
+        },
+        |path_str| Ok(path_str.to_owned()),
+    )
 }
 
 fn get_config_path() -> Result<String> {
@@ -218,6 +268,7 @@ fn get_config_path() -> Result<String> {
         |path_str| Ok(path_str.to_owned()),
     )
 }
+
 mod client;
 mod config;
 mod errors;
