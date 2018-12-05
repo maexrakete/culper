@@ -18,7 +18,8 @@ jobs:
     - name: "run tests"
       stage: quick build
       script:
-        - RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
+        - cargo clean
+        - (cargo install --list | grep tarpaulin) || RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
         - cargo test
         - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
 
@@ -28,7 +29,6 @@ jobs:
 
     - stage: release build 
       script:
-        - cargo clean
         - bash release-build.sh 
 
 stages:
@@ -37,9 +37,7 @@ stages:
   - name: quick build 
     if: tag IS blank
 
-  - name: release build
-    if: tag IS present
-  
+before_deploy: bash release-build.sh  
 deploy:
   provider: releases
   api_key:
