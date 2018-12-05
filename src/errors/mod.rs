@@ -1,4 +1,4 @@
-error_chain!{
+error_chain! {
   errors {
           UserError(description: String) {
               description(&description)

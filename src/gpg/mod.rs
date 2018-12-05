@@ -61,18 +61,13 @@ impl GpgManager {
     // Takes the armored exported public key and returns either an error or a
     // result containing the ID of the imported key
     pub fn import_key(&self, gpg_key: &str) -> Result<String> {
-        let mut child = Command::new("gpg")
-            .arg(format!("--homedir={}", &self.gpg_path))
-            .arg("--import")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        {
-            let stdin = child.stdin.as_mut().expect("Failed to open stdin");
-            stdin.write_all(gpg_key.as_bytes())?;
-        }
-        let output = child.wait_with_output().expect("Failed to read stdout");
+        let output = cmd!("gpg", format!("--homedir={}", &self.gpg_path), "--import")
+            .stderr_capture()
+            .stdout_capture()
+            .input(gpg_key.as_bytes())
+            .unchecked()
+            .run()?;
+
         if !output.status.success() {
             return Err(ErrorKind::RuntimeError(format!(
                 "Key was not imported. Error: [{}]: {}",
@@ -81,36 +76,24 @@ impl GpgManager {
             ))
             .into());
         };
-        let expr = Regex::new("[0-9A-Z]{16}").unwrap();
+
         let raw_output = String::from_utf8(output.stderr)?;
-        match expr.captures(&raw_output) {
-            Some(matches) => {
-                if matches.len() == 1usize {
-                    Ok(matches.get(0).unwrap().as_str().to_string())
-                } else {
-                    Err(ErrorKind::RuntimeError(format!(
-                        "Could not extract the key id from gpg output: {}",
-                        raw_output
-                    ))
-                    .into())
-                }
-            }
-            _ => Err(ErrorKind::RuntimeError(format!(
-                "Could not extract the key id from gpg output: {}",
-                raw_output
-            ))
-            .into()),
-        }
+        imported_key_from_stdout(raw_output)
     }
 
     pub fn parse_private_key(&self) -> Result<UserConfig> {
-        let process = Command::new("gpg")
-            .arg(format!("--homedir={}", &self.gpg_path))
-            .arg("--with-colons")
-            .arg("--list-secret-keys")
-            .arg("--keyid-format")
-            .arg("long")
-            .output()?;
+        let process = cmd!(
+            "gpg",
+            format!("--homedir={}", &self.gpg_path),
+            "--with-colons",
+            "--list-secret-keys",
+            "--keyid-format",
+            "long"
+        )
+        .stderr_capture()
+        .stdout_capture()
+        .unchecked()
+        .run()?;
 
         if !process.status.success() {
             return Err(ErrorKind::RuntimeError(format!(
@@ -121,39 +104,7 @@ impl GpgManager {
             .into());
         }
 
-        let list = String::from_utf8(process.stdout)?;
-        let config_lines: Vec<&str> = list
-            .lines()
-            .filter(|line| line.starts_with("sec") || line.starts_with("uid"))
-            .collect();
-        let config_items: Vec<Vec<&str>> = config_lines
-            .into_iter()
-            .map(|line| line.split(':').collect())
-            .collect();
-
-        // TODO: More exhaustive error reporting.
-        match (config_items.get(0), config_items.get(1)) {
-            (Some(sec_config), Some(uid_config)) => match (
-                sec_config.get(4),
-                extract_mail_from_uid(uid_config.get(9).cloned()),
-            ) {
-                (Some(keyid), Some(mail)) => Ok(UserConfig {
-                    id: keyid.to_string(),
-                    email: mail,
-                }),
-                _ => Err(ErrorKind::RuntimeError(
-                    "Could not reliably determine Key-ID or E-Mail from GPG output.".to_owned(),
-                )
-                .into()),
-            },
-            _ => Err(ErrorKind::RuntimeError(format!(
-                "Could not reliably determine sec and uid lines from gpg output. \
-                 Output was: \
-                 {}",
-                list
-            ))
-            .into()),
-        }
+        private_key_from_stdout(String::from_utf8(process.stdout)?)
     }
 
     pub fn verify(&self, content: &str, signature: &str) -> Result<bool> {
@@ -190,18 +141,13 @@ impl GpgManager {
     }
 
     pub fn sign(&self, payload: &str) -> Result<Vec<u8>> {
-        let mut child = Command::new("gpg")
-            .arg(format!("--homedir={}", &self.gpg_path))
-            .arg("--import")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        {
-            let stdin = child.stdin.as_mut().expect("Failed to open stdin");
-            stdin.write_all(payload.as_bytes())?;
-        }
-        let output = child.wait_with_output().expect("Failed to read stdout");
+        let output = cmd!("gpg", format!("--homedir={}", &self.gpg_path), "--import")
+            .stderr_capture()
+            .stdout_capture()
+            .unchecked()
+            .input(payload.as_bytes())
+            .run()?;
+
         if !output.status.success() {
             return Err(ErrorKind::RuntimeError(format!(
                 "Key was not imported. Error: [{}]: {}",
@@ -315,6 +261,63 @@ fn extract_mail_from_uid(raw_str: Option<&str>) -> Option<String> {
             }
         }
         None => None,
+    }
+}
+
+fn private_key_from_stdout(list: String) -> Result<UserConfig> {
+    let config_lines: Vec<&str> = list
+        .lines()
+        .filter(|line| line.starts_with("sec") || line.starts_with("uid"))
+        .collect();
+    let config_items: Vec<Vec<&str>> = config_lines
+        .into_iter()
+        .map(|line| line.split(':').collect())
+        .collect();
+
+    // TODO: More exhaustive error reporting.
+    match (config_items.get(0), config_items.get(1)) {
+        (Some(sec_config), Some(uid_config)) => match (
+            sec_config.get(4),
+            extract_mail_from_uid(uid_config.get(9).cloned()),
+        ) {
+            (Some(keyid), Some(mail)) => Ok(UserConfig {
+                id: keyid.to_string(),
+                email: mail,
+            }),
+            _ => Err(ErrorKind::RuntimeError(
+                "Could not reliably determine Key-ID or E-Mail from GPG output.".to_owned(),
+            )
+            .into()),
+        },
+        _ => Err(ErrorKind::RuntimeError(format!(
+            "Could not reliably determine sec and uid lines from gpg output. \
+             Output was: \
+             {}",
+            list
+        ))
+        .into()),
+    }
+}
+
+fn imported_key_from_stdout(raw_output: String) -> Result<String> {
+    let expr = Regex::new("[0-9A-Z]{16}").unwrap();
+    match expr.captures(&raw_output) {
+        Some(matches) => {
+            if matches.len() == 1usize {
+                Ok(matches.get(0).unwrap().as_str().to_string())
+            } else {
+                Err(ErrorKind::RuntimeError(format!(
+                    "Could not extract the key id from gpg output: {}",
+                    raw_output
+                ))
+                .into())
+            }
+        }
+        _ => Err(ErrorKind::RuntimeError(format!(
+            "Could not extract the key id from gpg output: {}",
+            raw_output
+        ))
+        .into()),
     }
 }
 

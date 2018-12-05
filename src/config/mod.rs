@@ -3,7 +3,6 @@ use errors::*;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::path::Path;
 use std::path::PathBuf;
 use toml;
 
@@ -39,7 +38,7 @@ impl ConfigReader {
             Some(val) => PathBuf::from(val),
             None => get_config_path()?,
         };
-        println!("Config: {:?}", config_path);
+
         Ok(ConfigReader {
             path: config_path,
             config: None,
