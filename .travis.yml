@@ -1,6 +1,7 @@
 language: rust
 sudo: required
 dist: trusty
+cache: cargo
 addons:
     apt:
         packages:
@@ -16,7 +17,10 @@ jobs:
   include:
     - name: "run tests"
       stage: quick build
-      script: cargo test
+      script:
+        - RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
+        - cargo test
+        - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
 
     - name: "test build"
       stage: quick build
@@ -25,8 +29,6 @@ jobs:
     - stage: release build 
       script:
         - cargo clean
-        - RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
-        - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
         - bash release-build.sh 
 
 stages:

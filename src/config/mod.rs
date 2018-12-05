@@ -38,7 +38,6 @@ impl ConfigReader {
             Some(val) => PathBuf::from(val),
             None => get_config_path()?,
         };
-
         Ok(ConfigReader {
             path: config_path,
             config: None,
@@ -132,6 +131,7 @@ pub mod gpg;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn can_create_config() {
