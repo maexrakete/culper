@@ -38,6 +38,7 @@ stages:
     if: tag IS blank
 
 before_deploy: bash release-build.sh  
+after_deploy: bash build_publish_docker.sh
 deploy:
   provider: releases
   api_key:
