@@ -36,6 +36,8 @@ stages:
 
   - name: quick build 
     if: tag IS blank
+  - name: release build
+    if: tag IS present
 
 before_deploy: bash release-build.sh  
 after_deploy: bash build_publish_docker.sh
