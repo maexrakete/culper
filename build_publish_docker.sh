@@ -9,7 +9,8 @@ echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
 docker build --build-arg CULPER_VER=${tag} -t ${tagged_image_name} .
 
-if [ tag | rg (alpha|beta|rc) = false]; then
+if [ $(echo $tag | rg "alpha|beta|rc") ]
+then
     docker tag ${tagged_image_name} ${base_image_name}:latest
 fi
 
