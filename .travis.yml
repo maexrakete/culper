@@ -7,7 +7,7 @@ addons:
         packages:
             - libssl-dev
             - openssl
-            - gpg2
+            - gnupg
 
 rust: nightly
 
