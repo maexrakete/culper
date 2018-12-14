@@ -1,6 +1,6 @@
 FROM alpine:3.8
 
-ENV CULPER_VER="0.3.1-alpha.1"
+ARG CULPER_VER="0.3.1-alpha.1"
 
 WORKDIR /
 
