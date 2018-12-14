@@ -7,6 +7,7 @@ addons:
         packages:
             - libssl-dev
             - openssl
+            - gpg2
 
 rust: nightly
 
@@ -20,8 +21,7 @@ jobs:
       script:
         - cargo clean
         - (cargo install --list | grep tarpaulin) || RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
-        - cargo test
-        - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+        - cargo tarpaulin -v --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
 
     - name: "test build"
       stage: quick build
