@@ -1,11 +1,11 @@
-FROM alpine:3.8
+FROM ubuntu:18.04
 
 ARG CULPER_VER="0.3.1-alpha.1"
 
 WORKDIR /
 
-RUN apk update \
-    && apk add gnupg \
+RUN apt-get update\
+    && apt-get install gnupg \
     && rm -rf /var/cache/apk/*
 
 RUN mkdir /config
