@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn cleanup() {
-        ::duct::cmd!("rm", "-rf", ".culper.toml")
+        ::duct::cmd!("rm", "-rf", "culper.toml")
             .run()
             .expect("This test should only fail if one of the previous test failed");
     }

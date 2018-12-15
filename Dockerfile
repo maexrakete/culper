@@ -5,7 +5,7 @@ ARG CULPER_VER="0.3.1-alpha.1"
 WORKDIR /
 
 RUN apt-get update\
-    && apt-get install gnupg \
+    && apt-get install -y gnupg \
     && rm -rf /var/cache/apk/*
 
 RUN mkdir /config
