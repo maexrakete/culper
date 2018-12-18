@@ -12,3 +12,6 @@ kcov-*
 .culper_gpg
 public/
 foo
+
+/target
+**/*.rs.bk
