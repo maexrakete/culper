@@ -171,8 +171,18 @@ fn real_main() -> Result<(), failure::Error> {
             let mut store = Store::open(&ctx, store_name).context("Failed to open the store")?;
             let mut recipients = vec![];
 
-            let priv_tsk = TSK::from_bytes(priv_key.as_bytes())?;
-            let priv_tpk = vec![priv_tsk.into_tpk()];
+            let mut priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
+
+            let pair = priv_tpk.primary_mut();
+            match pair.secret_mut() {
+                Some(secret) => secret.decrypt_in_place(
+                    sequoia::openpgp::constants::PublicKeyAlgorithm::RSAEncryptSign,
+                    &"insert-secret-here".into(),
+                ),
+                None => Err(format_err!("Could not access secret key")),
+            }?;
+
+            let priv_tpk = vec![priv_tpk];
 
             recipients.extend(priv_tpk.clone());
             let data = commands::encrypt(recipients, priv_tpk)?;

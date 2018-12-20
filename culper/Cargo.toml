@@ -5,7 +5,7 @@ authors = ["Mäx <max.kiehnscherf@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-sequoia = { git = "https://gitlab.com/sequoia-pgp/sequoia.git" }
+sequoia = { git = "https://github.com/maexrakete/sequoia.git" }
 clap = "2.32.0"
 failure = "0.1.2"
 prettytable-rs = "0.8.0"
