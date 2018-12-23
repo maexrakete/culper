@@ -20,25 +20,22 @@ extern crate toml;
 
 use failure::ResultExt;
 use prettytable::{Cell, Row, Table};
+use promptly::prompt;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
 use std::process::exit;
 
+use self::vault::{OpenableVault, SealableVault};
 use clap::ArgMatches;
 use failure::Error;
 use sequoia::core::Context;
-use sequoia::openpgp::packet::KeyFlags;
 use sequoia::openpgp::parse::Parse;
 use sequoia::openpgp::serialize::Serialize;
-use sequoia::openpgp::{armor, Fingerprint, TPK, TSK};
+use sequoia::openpgp::{armor, TPK};
 use sequoia::store::{LogIter, Store};
 use std::path::PathBuf;
-
-mod commands;
-mod config;
-mod culper_cli;
 
 lazy_static! {
     static ref matches: ArgMatches<'static> = culper_cli::build().get_matches();
@@ -129,17 +126,6 @@ fn create_or_stdout(f: Option<&str>, force: bool) -> Result<Box<io::Write>, fail
     }
 }
 
-fn load_tpks<'a, I>(files: I) -> sequoia::openpgp::Result<Vec<TPK>>
-where
-    I: Iterator<Item = &'a str>,
-{
-    let mut tpks = vec![];
-    for f in files {
-        tpks.push(TPK::from_file(f).context(format!("Failed to load key from file {:?}", f))?);
-    }
-    Ok(tpks)
-}
-
 /// Prints a warning if the user supplied "help" or "-help" to an
 /// positional argument.
 ///
@@ -155,38 +141,60 @@ fn help_warning(arg: &str) {
 }
 
 fn real_main() -> Result<(), failure::Error> {
-    let mut ctx = Context::configure("localhost")
+    let ctx = Context::configure("localhost")
         .home(home_dir(matches.value_of("home")))
         .build()?;
     let store_name = "default";
     match matches.subcommand() {
         ("encrypt", Some(m)) => {
-            let mut input = open_or_stdin(m.value_of("input"))?;
             let mut output = create_or_stdout(m.value_of("output"), false)?;
             let mut output = if !m.is_present("binary") {
                 Box::new(armor::Writer::new(&mut output, armor::Kind::Message, &[])?)
             } else {
                 output
             };
-            let mut store = Store::open(&ctx, store_name).context("Failed to open the store")?;
+
+            let store = Store::open(&ctx, store_name).context("Failed to open the store")?;
             let mut recipients = vec![];
 
             let mut priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
 
             let pair = priv_tpk.primary_mut();
             match pair.secret_mut() {
-                Some(secret) => secret.decrypt_in_place(
-                    sequoia::openpgp::constants::PublicKeyAlgorithm::RSAEncryptSign,
-                    &"insert-secret-here".into(),
-                ),
+                Some(secret) => {
+                    if secret.is_encrypted() {
+                        let password = rpassword::prompt_password_stderr(
+                            "Enter password to decrypt private key: ",
+                        )
+                        .context("Could not read password from stdin.")?;
+
+                        secret.decrypt_in_place(
+                            sequoia::openpgp::constants::PublicKeyAlgorithm::RSAEncryptSign,
+                            &password.into(),
+                        )
+                    } else {
+                        Ok(())
+                    }
+                }
                 None => Err(format_err!("Could not access secret key")),
             }?;
 
             let priv_tpk = vec![priv_tpk];
-
             recipients.extend(priv_tpk.clone());
-            let data = commands::encrypt(recipients, priv_tpk)?;
-            println!("Payload: {}", base64::encode(&data));
+
+            eprint!("Enter value to decrypt: ");
+            let value: String = prompt("");
+            let vault =
+                vault::UnsealedVault::new(value.to_owned(), vault::EncryptionFormat::GPG_KEY);
+            let sealed_vault = vault.seal(&move |vault: vault::UnsealedVault| {
+                let secret_bytes = vault.plain_secret.as_bytes();
+                let data =
+                    commands::encrypt(secret_bytes.to_vec(), recipients.clone(), priv_tpk.clone())?;
+
+                Ok(vault::SealedVault::new(data, vault.format))
+            })?;
+
+            println!("{}", sealed_vault.to_string());
         }
         ("store", Some(m)) => {
             let store = Store::open(&ctx, store_name).context("Failed to open the store")?;
@@ -339,3 +347,8 @@ fn main() {
         exit(2);
     }
 }
+
+mod commands;
+mod config;
+mod culper_cli;
+mod vault;

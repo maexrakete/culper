@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 FROM alpine:3.8
 
 ENV CULPER_VER="0.3.1-alpha.1"
@@ -6,6 +7,16 @@ WORKDIR /
 
 RUN apk update \
     && apk add gnupg \
+=======
+FROM ubuntu:18.04
+
+ARG CULPER_VER="0.3.1-alpha.1"
+
+WORKDIR /
+
+RUN apt-get update\
+    && apt-get install -y gnupg \
+>>>>>>> [wip] implement sequoia
     && rm -rf /var/cache/apk/*
 
 RUN mkdir /config

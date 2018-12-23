@@ -38,6 +38,7 @@ fn tm2str(t: &time::Tm) -> String {
 }
 
 pub fn encrypt(
+    data: Vec<u8>,
     tpks: Vec<sequoia::openpgp::TPK>,
     signers: Vec<sequoia::openpgp::TPK>,
 ) -> Result<Vec<u8>> {
@@ -61,6 +62,7 @@ pub fn encrypt(
 
         let mut literal_writer = LiteralWriter::new(sink, DataFormat::Binary, None, None)
             .context("Failed to create literal writer")?;
+        literal_writer.write_all(&data)?;
         literal_writer.finalize()?;
     }
 
