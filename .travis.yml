@@ -7,7 +7,10 @@ addons:
         packages:
             - libssl-dev
             - openssl
-            - gnupg
+            - pkg-config
+            - nettle-dev
+            - capnproto
+            - libsqlite3-dev
 
 rust: nightly
 
