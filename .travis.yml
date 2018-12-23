@@ -19,9 +19,7 @@ jobs:
     - name: "run tests"
       stage: quick build
       script:
-        - cargo clean
-        - (cargo install --list | grep tarpaulin) || RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
-        - cargo tarpaulin -v --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+        - cargo test
 
     - name: "test build"
       stage: quick build
@@ -29,10 +27,7 @@ jobs:
 
     - stage: release build 
       script:
-        - cargo clean
-        - RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install -f cargo-tarpaulin
-        - cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
-
+        - cargo build
 stages:
   - run tests
 
