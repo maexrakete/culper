@@ -13,6 +13,7 @@ jobs:
     - name: "run tests"
       stage: quick build
       script:
+        - chmod -R 777 .
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
 
 
