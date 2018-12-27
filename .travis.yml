@@ -14,16 +14,19 @@ jobs:
       stage: quick build
       script:
         - chmod -R 777 .
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
+        - docker run --rm -it -u `id -u $USER` -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
 
 
     - name: "test build"
       stage: quick build
-      script: docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
+      script:
+        - chmod -R 777 .
+        - docker run --rm -it -u `id -u $USER` -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
 
     - stage: release build 
       script:
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build
+        - chmod -R 777 .
+        - docker run --rm -it -u `id -u $USER` -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build
 stages:
   - run tests
 
