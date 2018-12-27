@@ -1,16 +1,7 @@
 language: rust
 sudo: required
-dist: trusty
+dist: xenial
 cache: cargo
-addons:
-    apt:
-        packages:
-            - libssl-dev
-            - openssl
-            - pkg-config
-            - nettle-dev
-            - capnproto
-            - libsqlite3-dev
 
 rust: nightly
 
@@ -22,15 +13,16 @@ jobs:
     - name: "run tests"
       stage: quick build
       script:
-        - cargo test
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
+
 
     - name: "test build"
       stage: quick build
-      script: cargo build --verbose
+      script: docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
 
     - stage: release build 
       script:
-        - cargo build
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build
 stages:
   - run tests
 
