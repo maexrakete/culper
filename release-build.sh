@@ -6,4 +6,4 @@ if [ "$TRAVIS" = true ]; then
 fi
 
 rm -rf target
-docker run -e LIBZ_SYS_STATIC=1 --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --release
+docker run -e LIBZ_SYS_STATIC=1 --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-musl-builder cargo build --release

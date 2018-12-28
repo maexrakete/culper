@@ -1,10 +1,9 @@
 language: rust
 sudo: required
 dist: xenial
+
 cache: cargo
-
 rust: nightly
-
 services:
   - docker
 
@@ -21,7 +20,7 @@ jobs:
       stage: quick build
       script:
         - chmod -R 777 .
-        - docker run --rm -it -u -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
         - chmod -R 777 .
 
     - stage: release build 
