@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-ARG CULPER_VER="0.3.1-alpha.1"
+ARG CULPER_VER="20181228030356-c3c38d1"
 
 WORKDIR /
 
@@ -11,11 +11,11 @@ RUN apt-get update\
 RUN mkdir /config
 RUN mkdir /gpg
 
-ADD https://github.com/maexrakete/culper/releases/download/${CULPER_VER}/culper /usr/bin/culper
+ADD https://github.com/maexrakete/culper/releases/download/${CULPER_VER}/culper-server /usr/bin/culper-server
 
-RUN chmod +x /usr/bin/culper
+RUN chmod +x /usr/bin/culper-server
 
 VOLUME ["/config", "/gpg"]
 
-EXPOSE 8000
-ENTRYPOINT ["culper", "--gpg_path=/gpg", "--config_file=/config/culper.toml", "server"]
+EXPOSE 8080
+ENTRYPOINT ["culper-server"]
