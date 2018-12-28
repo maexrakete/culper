@@ -4,6 +4,7 @@ dist: xenial
 
 cache: cargo
 rust: nightly
+
 services:
   - docker
 
@@ -12,22 +13,22 @@ jobs:
     - name: "run tests"
       stage: quick build
       script:
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
 
     - name: "test build"
       stage: quick build
       script:
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
 
     - stage: release build 
       script:
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build
-        - chmod -R 777 .
+        - sudo chmod -R 777 .
 stages:
   - run tests
 
