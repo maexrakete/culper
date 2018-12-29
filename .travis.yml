@@ -38,7 +38,7 @@ before_deploy:
   - bash release-build.sh 
 
 after_deploy:
-  - bash build_release_docker.sh 
+  - bash build_publish_docker.sh 
 
 deploy:
   provider: releases
@@ -47,6 +47,8 @@ deploy:
   file:
     - "target/x86_64-unknown-linux-musl/release/culper"
     - "target/x86_64-unknown-linux-musl/release/culper-server"
+    - "culper-server-version"
+    - "culper-version"
   skip_cleanup: true
   on:
     branch: release 
