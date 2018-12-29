@@ -2,5 +2,6 @@
 
 members = [
     "culper-server",
+    "culper-lib",
     "culper"
 ]

@@ -5,6 +5,7 @@ authors = ["Mäx <max.kiehnscherf@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+culper-lib = { path = "../culper-lib" }
 sequoia = { git = "https://github.com/maexrakete/sequoia.git" }
 clap = "2.32.0"
 failure = "0.1.2"

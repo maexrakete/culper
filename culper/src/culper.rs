@@ -14,6 +14,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate base64;
+extern crate culper_lib;
 extern crate sequoia;
 extern crate serde_yaml;
 extern crate toml;
@@ -27,7 +28,10 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::process::exit;
 
-use self::vault::{OpenableVault, SealableVault};
+use culper_lib::config;
+use culper_lib::vault;
+use culper_lib::vault::{OpenableVault, SealableVault};
+
 use clap::ArgMatches;
 use failure::Error;
 use sequoia::core::Context;
@@ -349,6 +353,4 @@ fn main() {
 }
 
 mod commands;
-mod config;
 mod culper_cli;
-mod vault;
