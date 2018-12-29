@@ -38,7 +38,7 @@ before_deploy:
   - bash release-build.sh 
 
 after_deploy:
-  - echo $TRAVIS_TAG
+  - bash build_release_docker.sh 
 
 deploy:
   provider: releases

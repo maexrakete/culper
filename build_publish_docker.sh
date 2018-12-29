@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e -u -o pipefail
 
-tag=${TRAVIS_TAG}
+tag=${cat culper-server/Cargo.toml | sed -nr 's/version = "(.*)"/\1/p'}
 base_image_name=mietzekotze/culper-server
 tagged_image_name=${base_image_name}:${tag}
 
