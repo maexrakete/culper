@@ -1,7 +1,0 @@
-[[targets]]
-id = "alskjdflsajfd"
-host = "www.test.de"
-
-[me]
-id = "87654321"
-email = "overwrite@mail.de"

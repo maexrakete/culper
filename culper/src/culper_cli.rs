@@ -1,13 +1,9 @@
-/// Command-line parser for sq.
-///
-/// If you change this file, please rebuild `sq`, run `make -C tool
-/// update-usage`, and commit the resulting changes to
 use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
 
 pub fn build() -> App<'static, 'static> {
-    App::new("sq")
+    App::new("culper")
         .version("0.1.0")
-        .about("Sequoia is an implementation of OpenPGP.  This is a command-line frontend.")
+        .about("")
         .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("home")
