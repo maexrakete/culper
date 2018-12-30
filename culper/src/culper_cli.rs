@@ -17,6 +17,16 @@ pub fn build() -> App<'static, 'static> {
                 .about("Decrypts a message"),
         )
         .subcommand(
+            SubCommand::with_name("target")
+                .subcommand(
+                    SubCommand::with_name("add").setting(AppSettings::AllowExternalSubcommands),
+                )
+                .subcommand(
+                    SubCommand::with_name("remove").setting(AppSettings::AllowExternalSubcommands),
+                )
+                .subcommand(SubCommand::with_name("list")),
+        )
+        .subcommand(
             SubCommand::with_name("encrypt")
                 .display_order(20)
                 .about("Encrypts a message"),

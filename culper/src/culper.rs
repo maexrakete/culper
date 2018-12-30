@@ -40,6 +40,7 @@ use sequoia::openpgp::serialize::Serialize;
 use sequoia::openpgp::{armor, TPK};
 use sequoia::store::{LogIter, Store};
 use std::path::PathBuf;
+use url::Url;
 
 lazy_static! {
     static ref matches: ArgMatches<'static> = culper_cli::build().get_matches();
@@ -200,86 +201,26 @@ fn real_main() -> Result<(), failure::Error> {
 
             println!("{}", sealed_vault.to_string());
         }
-        ("store", Some(m)) => {
-            let store = Store::open(&ctx, store_name).context("Failed to open the store")?;
-
+        ("target", Some(m)) => {
+            let store = Store::open(&ctx, "targets").context("Failed to open the store")?;
             match m.subcommand() {
+                ("add", Some(m)) => {
+                    let url = Url::parse(m.subcommand().0)?;
+                    let response =
+                        reqwest::get(url).and_then(|mut response| Ok(response.text()?))?;
+                    let tpk = TPK::from_bytes(response.as_bytes())?;
+                    store.import(&format!("{}", m.subcommand().0), &tpk)?;
+                }
+                ("remove", Some(m)) => {
+                    let binding = store
+                        .lookup(m.subcommand().0)
+                        .context("Failed to get key")?;
+                    binding.delete().context("Failed to delete the binding")?;
+                }
                 ("list", Some(_)) => {
-                    list_bindings(&store, "localhost", store_name)?;
+                    list_bindings(&store, "localhost", "targets")?;
                 }
-                ("import", Some(m)) => {
-                    let label = m.value_of("label").unwrap();
-                    help_warning(label);
-                    let mut input = open_or_stdin(m.value_of("input"))?;
-                    let tpk = TPK::from_reader(&mut input)?;
-                    store.import(label, &tpk)?;
-                }
-                ("export", Some(m)) => {
-                    let tpk = store.lookup(m.value_of("label").unwrap())?.tpk()?;
-
-                    let mut output = create_or_stdout(m.value_of("output"), false)?;
-                    let mut output = if !m.is_present("binary") {
-                        Box::new(armor::Writer::new(
-                            &mut output,
-                            armor::Kind::PublicKey,
-                            &[],
-                        )?)
-                    } else {
-                        output
-                    };
-
-                    tpk.serialize(&mut output)?;
-                }
-                ("delete", Some(m)) => {
-                    if m.is_present("label") == m.is_present("the-store") {
-                        eprintln!("Please specify either a label or --the-store.");
-                        exit(1);
-                    }
-
-                    if m.is_present("the-store") {
-                        store.delete().context("Failed to delete the store")?;
-                    } else {
-                        let binding = store
-                            .lookup(m.value_of("label").unwrap())
-                            .context("Failed to get key")?;
-                        binding.delete().context("Failed to delete the binding")?;
-                    }
-                }
-                _ => {
-                    eprintln!("No store subcommand given.");
-                    exit(1);
-                }
-            }
-        }
-        ("keygen", Some(m)) => {
-            use sequoia::openpgp::armor::{Kind, Writer};
-            use sequoia::openpgp::serialize::Serialize;
-            use sequoia::openpgp::tpk::{CipherSuite, TPKBuilder};
-
-            let mut builder = TPKBuilder::default();
-
-            // User ID
-            match m.value_of("userid") {
-                Some(uid) => {
-                    builder = builder.add_userid(uid);
-                }
-                None => {
-                    eprintln!("No user ID given, using direct key signature");
-                }
-            }
-
-            builder = builder.set_cipher_suite(CipherSuite::RSA3k);
-            builder = builder.add_signing_subkey();
-            builder = builder.add_encryption_subkey();
-
-            // Generate the key
-            let (tpk, _rev) = builder.generate()?;
-            let tsk = tpk.into_tsk();
-
-            {
-                let w = create_or_stdout(None, false)?;
-                let mut w = Writer::new(w, Kind::SecretKey, &[])?;
-                tsk.serialize(&mut w)?;
+                _ => unimplemented!(),
             }
         }
         _ => {
@@ -293,10 +234,7 @@ fn real_main() -> Result<(), failure::Error> {
 
 fn list_bindings(store: &Store, domain: &str, name: &str) -> Result<(), failure::Error> {
     if store.iter()?.count() == 0 {
-        println!(
-            "No label-key bindings in the \"{}/{}\" store.",
-            domain, name
-        );
+        println!("No {} available.", name);
         return Ok(());
     }
 
