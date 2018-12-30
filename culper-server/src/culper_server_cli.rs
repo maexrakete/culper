@@ -1,14 +1,14 @@
-use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+use clap::{App, Arg};
 
 pub fn build() -> App<'static, 'static> {
     App::new("culper-server")
         .version("0.1.0")
         .about("Server side part of culper")
-        .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
             Arg::with_name("home")
                 .value_name("DIRECTORY")
                 .long("home")
-                .help("Sets the home directory to use"),
+                .help("Sets the home directory to use")
+                .required(false),
         )
 }

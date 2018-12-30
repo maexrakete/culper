@@ -7,23 +7,32 @@ extern crate slog_async;
 extern crate slog_json;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate failure;
 
-use actix_web::{middleware, server, App, HttpRequest, HttpResponse};
+use self::admin_service::AdminService;
+use actix_web::{http, middleware, server, App, HttpRequest, HttpResponse, Json};
+use base64::decode;
 use clap::ArgMatches;
 use culper_lib::config;
 use failure::{Error, ResultExt};
-use log::info;
+use log::{debug, error, info, warn};
+use r2d2_sqlite::SqliteConnectionManager;
+use sequoia::core::Context;
 use sequoia::openpgp::armor::{Kind, Writer};
 use sequoia::openpgp::serialize::Serialize;
-use sequoia::openpgp::{TPK, TSK};
+use sequoia::openpgp::TSK;
+use sequoia::store::Store;
 use slog::Drain;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::exit;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 lazy_static! {
     static ref matches: ArgMatches<'static> = culper_server_cli::build().get_matches();
@@ -38,13 +47,66 @@ lazy_static! {
 
 /// Application state
 struct AppState {
-    counter: Arc<Mutex<usize>>,
     pubkey: String,
+    secret: Arc<Mutex<Option<String>>>,
+    admin_store: AdminService,
+}
+
+/// ADmin registration request
+#[derive(Serialize, Deserialize)]
+struct AdminRegisterRequest {
+    name: String,
+    key: String,
 }
 
 /// simple handle
 fn index(req: &HttpRequest<AppState>) -> HttpResponse {
     HttpResponse::Ok().body(format!("{}", req.state().pubkey))
+}
+
+fn add_admin(
+    (req, admin_request): (HttpRequest<AppState>, Json<AdminRegisterRequest>),
+) -> actix_web::Result<HttpResponse> {
+    match (
+        req.request().headers().get("x-setup-key"),
+        req.state().secret.lock(),
+    ) {
+        (None, _) => Ok(HttpResponse::Unauthorized().finish()),
+        (Some(key), Ok(mut mutex_secret)) => match *(mutex_secret) {
+            Some(ref secret) => {
+                if key == secret {
+                    debug!("Decode base64-encoded public key.");
+                    let key_bytes = decode(admin_request.key.as_bytes()).or_else(|_| {
+                        error!("Failed decode base64 key.");
+                        Err(format_err!("Invalid key format."))
+                    })?;
+
+                    debug!("Parsing public key into TSK.");
+                    let tpk = TSK::from_bytes(key_bytes.as_slice())
+                        .or_else(|_| {
+                            error!("Submitted key could not be parsed into TSK.");
+                            Err(format_err!("Submitted key seems to be invalid."))
+                        })?
+                        .into_tpk();
+
+                    req.state().admin_store.import(&admin_request.name, tpk)?;
+                    let _ = mutex_secret.take();
+                    Ok(HttpResponse::Ok().finish())
+                } else {
+                    warn!("Invalid key given");
+                    Ok(HttpResponse::Unauthorized().finish())
+                }
+            }
+            None => {
+                warn!("Secret was consumed");
+                Ok(HttpResponse::Unauthorized().finish())
+            }
+        },
+        (_, Err(err)) => {
+            error!("Error acquiring mutex lock: {}", err);
+            Ok(HttpResponse::InternalServerError().finish())
+        }
+    }
 }
 
 fn main() {
@@ -61,31 +123,49 @@ fn main() {
 }
 
 fn app() -> Result<(), failure::Error> {
-    ::std::env::set_var("RUST_LOG", "actix_web=info");
     let root_logger = default_root_logger("culper-server");
     let _guard = slog_scope::set_global_logger(root_logger);
     slog_stdlog::init().unwrap();
+
+    let ctx = Context::configure("localhost")
+        .home(home_dir(matches.value_of("home")))
+        .build()?;
+    let admin_store = Store::open(&ctx, "admins").context("Failed to open the store")?;
+    let manager = SqliteConnectionManager::file(format!(
+        "{}/public-key-store.sqlite",
+        homedir.to_str().expect("Could not get home dir as string.")
+    ));
+    let pool = r2d2::Pool::new(manager)?;
 
     if !system_is_setup(homedir.to_path_buf(), keypath.to_path_buf()) {
         generate_certificate(keypath.to_path_buf()).context("Could not generate keys")?;
     };
 
-    let pubkey_bytes = system_initialize();
-    let pubkey = String::from_utf8(pubkey_bytes?)?;
+    let secret_option = if admin_store.iter()?.count() == 0usize {
+        let secret_key = Uuid::new_v4().to_simple().to_string();
+        info!("Generated key for admin setup: {}", secret_key);
+        Some(secret_key)
+    } else {
+        None
+    };
+
+    let secret = Arc::new(Mutex::new(secret_option));
+    let pubkey = String::from_utf8(system_initialize()?)?;
 
     let sys = actix::System::new("culper-server");
 
-    let counter = Arc::new(Mutex::new(0));
     //move is necessary to give closure below ownership of counter
     server::new(move || {
         App::with_state(AppState {
-            counter: counter.clone(),
             pubkey: pubkey.clone(),
+            secret: secret.clone(),
+            admin_store: AdminService::new(pool.get().unwrap()).unwrap(),
         }) // <- create app with shared state
         // enable logger
         .middleware(middleware::Logger::default())
         // register simple handler, handle all methods
         .resource("/", |r| r.f(index))
+        .resource("/admin", |r| r.method(http::Method::POST).with(add_admin))
     })
     .bind("0.0.0.0:8080")
     .unwrap()
@@ -142,7 +222,7 @@ fn generate_certificate(priv_key_path: PathBuf) -> Result<(), failure::Error> {
 
     let (tpk, _) = builder.generate()?;
     let tsk = tpk.into_tsk();
-    println!("Create key at {:?}", priv_key_path);
+    info!("Create key at {:?}", priv_key_path);
 
     let file = OpenOptions::new()
         .write(true)
@@ -214,4 +294,5 @@ fn read_priv_key(path: PathBuf) -> Result<String, Error> {
 
     Ok(content)
 }
+mod admin_service;
 mod culper_server_cli;
