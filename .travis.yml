@@ -24,16 +24,26 @@ jobs:
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
         - sudo chmod -R 777 .
 
+    - name: "release build"
+      stage: release build
+      script:
+        - sudo chmod -R 777 .
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --release
+        - sudo chmod -R 777 .
+
 stages:
   - run tests
 
   - name: quick build 
-    if: tag IS blank
+    if: branch != release 
+    
+  - name: release build 
+    if: branch = release 
 
 before_deploy:
   - git config --local user.name "Maex R."
   - git config --local user.email "max.kiehnscherf@gmail.com"
-  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
+  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d')-$(git log --format=%h -1)}
   - git tag $TRAVIS_TAG 
   - bash release-build.sh 
 

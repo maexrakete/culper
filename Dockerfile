@@ -1,21 +1,20 @@
 FROM ubuntu:18.04
 
-ARG CULPER_VER="20181228162340-b1c5540"
+ARG CULPER_VER="20181229232726-4c6751e"
 
 WORKDIR /
 
 RUN apt-get update\
-    && apt-get install -y gnupg \
+    && apt-get install -y git rustc cargo clang make pkg-config nettle-dev libssl-dev capnproto libsqlite3-dev\
     && rm -rf /var/cache/apk/*
 
 RUN mkdir /config
-RUN mkdir /gpg
 
-ADD https://github.com/maexrakete/culper/releases/download/${CULPER_VER}/culper-server /usr/bin/culper-server
+COPY target/release/culper-server /usr/bin/culper-server
 
 RUN chmod +x /usr/bin/culper-server
 
-VOLUME ["/config", "/gpg"]
+VOLUME ["/config"]
 
 EXPOSE 8080
-ENTRYPOINT ["culper-server"]
+ENTRYPOINT ["/usr/bin/culper-server", "--home=/config"]
