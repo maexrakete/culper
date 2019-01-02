@@ -29,6 +29,7 @@ use std::path::Path;
 use std::process::exit;
 
 use culper_lib::config;
+use culper_lib::config::{CulperConfig, UserConfig};
 use culper_lib::vault;
 use culper_lib::vault::{OpenableVault, SealableVault};
 
@@ -44,16 +45,19 @@ use url::Url;
 
 lazy_static! {
     static ref matches: ArgMatches<'static> = culper_cli::build().get_matches();
-    static ref config_reader: config::ConfigReader =
-        config::ConfigReader::new(matches.value_of("home"));
-    static ref priv_key: String = read_priv_key(
+    static ref config_reader: config::ConfigReader = config::ConfigReader::new(Some(
+        config_file_path(home_dir(matches.value_of("home")))
+            .to_str()
+            .expect("Could not get config path string.")
+    ));
+    static ref priv_key: String = read_priv_key(priv_key_path(
         home_dir(matches.value_of("home")),
         matches.value_of("priv_key")
-    )
+    ))
     .expect("Could not read private key file.");
 }
 
-fn read_priv_key(home_dir: PathBuf, maybe_priv_key: Option<&str>) -> Result<String, Error> {
+fn priv_key_path(home_dir: PathBuf, maybe_priv_key: Option<&str>) -> PathBuf {
     let mut path = PathBuf::new();
     match maybe_priv_key {
         // key is not at home location or named differently
@@ -64,7 +68,17 @@ fn read_priv_key(home_dir: PathBuf, maybe_priv_key: Option<&str>) -> Result<Stri
             path.push("privkey.asc");
         }
     };
+    path
+}
 
+fn config_file_path(home_dir: PathBuf) -> PathBuf {
+    let mut path = PathBuf::new();
+    path.push(home_dir);
+    path.push(".culper.toml");
+    path
+}
+
+fn read_priv_key(path: PathBuf) -> Result<String, Error> {
     let mut content = String::new();
     File::open(&path)
         .context(format!(
@@ -86,10 +100,9 @@ fn home_dir(maybe_home: Option<&str>) -> PathBuf {
         Some(given_home) => path.push(given_home),
         None => match dirs::home_dir() {
             Some(home) => path.push(home),
-            None => path.push("./"),
+            None => path.push("./.culper"),
         },
     }
-    path.push(".culper");
     path
 }
 
@@ -151,16 +164,62 @@ fn real_main() -> Result<(), failure::Error> {
         .build()?;
     let store_name = "default";
     match matches.subcommand() {
-        ("encrypt", Some(m)) => {
-            let mut output = create_or_stdout(m.value_of("output"), false)?;
-            let mut output = if !m.is_present("binary") {
-                Box::new(armor::Writer::new(&mut output, armor::Kind::Message, &[])?)
-            } else {
-                output
-            };
+        ("setup", Some(m)) => {
+            let name = m.value_of("name").unwrap();
+            let priv_key_path_str = priv_key_path(
+                home_dir(matches.value_of("home")),
+                matches.value_of("priv_key"),
+            );
 
-            let store = Store::open(&ctx, store_name).context("Failed to open the store")?;
-            let mut recipients = vec![];
+            // read key from stdin
+            let mut in_key_bytes = vec![];
+            open_or_stdin(None)?.read_to_end(&mut in_key_bytes)?;
+
+            // Validate given key.
+            let tpk = TPK::from_bytes(&in_key_bytes).context("Given key is not parsable.")?;
+
+            // write out distinct key to config path.
+            let mut output_key = create_or_stdout(
+                Some(
+                    priv_key_path_str
+                        .to_str()
+                        .expect("Failed creating path string for private key."),
+                ),
+                true,
+            )?;
+            output_key.write_all(&in_key_bytes)?;
+
+            // write to config
+            let fingerprint = tpk.fingerprint();
+            let new_config = match config_reader.clone().read() {
+                // Update existing config
+                Ok(config) => {
+                    let mut new_config = config.clone();
+                    new_config.me = UserConfig {
+                        name: name.to_owned(),
+                        fingerprint: fingerprint.to_string(),
+                    };
+                    new_config
+                }
+                // Create new config
+                Err(_) => CulperConfig {
+                    me: UserConfig {
+                        name: name.to_owned(),
+                        fingerprint: fingerprint.to_string(),
+                    },
+                    targets: None,
+                    owners: None,
+                    admins: None,
+                },
+            };
+            config_reader.clone().update(new_config).write()?;
+        }
+        ("encrypt", Some(m)) => {
+            let mut recipients: Vec<&sequoia::openpgp::TPK> = vec![];
+            let target_store = Store::open(&ctx, "targets").context("Failed to open the store")?;
+            let admin_store = Store::open(&ctx, "admins").context("Failed to open the store")?;
+            recipients.extend(target_store.iter()?.collect());
+            recipients.extend(admin_store.iter()?.collect());
 
             let mut priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
 
@@ -184,7 +243,7 @@ fn real_main() -> Result<(), failure::Error> {
                 None => Err(format_err!("Could not access secret key")),
             }?;
 
-            let priv_tpk = vec![priv_tpk];
+            let priv_tpk: Vec<&sequoia::openpgp::TPK> = vec![&priv_tpk];
             recipients.extend(priv_tpk.clone());
 
             eprint!("Enter value to decrypt: ");

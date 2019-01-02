@@ -16,8 +16,8 @@ pub struct CulperConfig {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfig {
-    pub id: String,
-    pub email: String,
+    pub fingerprint: String,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -30,15 +30,6 @@ pub struct TargetConfig {
 pub struct ConfigReader {
     pub path: PathBuf,
     pub config: Option<CulperConfig>,
-}
-
-#[derive(Debug, Fail)]
-enum ConfigReaderError {
-    #[fail(
-        display = "{} not found. Create one or pass the --config_file option.",
-        0
-    )]
-    ConfigNotFound(String),
 }
 
 impl ConfigReader {
@@ -99,8 +90,9 @@ impl ConfigReader {
         }
     }
 
-    pub fn update(&mut self, new_config: CulperConfig) {
+    pub fn update(&mut self, new_config: CulperConfig) -> &mut Self {
         self.config = Some(new_config);
+        self
     }
 
     pub fn write(&self) -> Result<(), Error> {
@@ -133,9 +125,9 @@ fn get_config_path() -> PathBuf {
     path
 }
 
-pub fn create(email: String, id: String, config_path: String) -> Result<(), Error> {
+pub fn create(name: String, fingerprint: String, config_path: String) -> Result<(), Error> {
     let config = CulperConfig {
-        me: UserConfig { email, id },
+        me: UserConfig { name, fingerprint },
         targets: None,
         owners: None,
         admins: None,

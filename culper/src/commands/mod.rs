@@ -39,11 +39,10 @@ fn tm2str(t: &time::Tm) -> String {
 
 pub fn encrypt(
     data: Vec<u8>,
-    tpks: Vec<sequoia::openpgp::TPK>,
-    signers: Vec<sequoia::openpgp::TPK>,
+    recipients: Vec<&sequoia::openpgp::TPK>,
+    signers: Vec<&sequoia::openpgp::TPK>,
 ) -> Result<Vec<u8>> {
     // Build a vector of references to hand to Encryptor.
-    let recipients: Vec<&sequoia::openpgp::TPK> = tpks.iter().collect();
     let mut crypted_data: Vec<u8> = vec![];
 
     {
@@ -56,8 +55,7 @@ pub fn encrypt(
 
         // Optionally sign message.
         if !signers.is_empty() {
-            let signers_: Vec<&sequoia::openpgp::TPK> = signers.iter().collect();
-            sink = Signer::with_intended_recipients(sink, &signers_, &recipients)?;
+            sink = Signer::with_intended_recipients(sink, &signers, &recipients)?;
         }
 
         let mut literal_writer = LiteralWriter::new(sink, DataFormat::Binary, None, None)
