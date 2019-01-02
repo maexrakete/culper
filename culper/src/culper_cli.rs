@@ -29,7 +29,14 @@ pub fn build() -> App<'static, 'static> {
         .subcommand(
             SubCommand::with_name("target")
                 .subcommand(
-                    SubCommand::with_name("add").setting(AppSettings::AllowExternalSubcommands),
+                    SubCommand::with_name("add")
+                        .setting(AppSettings::AllowExternalSubcommands)
+                        .arg(
+                            Arg::with_name("token")
+                                .long("as_admin")
+                                .takes_value(true)
+                                .required(false),
+                        ),
                 )
                 .subcommand(
                     SubCommand::with_name("remove").setting(AppSettings::AllowExternalSubcommands),

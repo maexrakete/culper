@@ -39,9 +39,12 @@ fn tm2str(t: &time::Tm) -> String {
 
 pub fn encrypt(
     data: Vec<u8>,
-    recipients: Vec<&sequoia::openpgp::TPK>,
-    signers: Vec<&sequoia::openpgp::TPK>,
+    recipients_tpks: Vec<sequoia::openpgp::TPK>,
+    signers_tpks: Vec<sequoia::openpgp::TPK>,
 ) -> Result<Vec<u8>> {
+    let recipients: Vec<&sequoia::openpgp::TPK> = recipients_tpks.iter().collect();
+    let signers: Vec<&sequoia::openpgp::TPK> = signers_tpks.iter().collect();
+
     // Build a vector of references to hand to Encryptor.
     let mut crypted_data: Vec<u8> = vec![];
 
@@ -560,7 +563,6 @@ pub fn verify(
     ctx: &Context,
     store: &mut store::Store,
     input: &mut io::Read,
-    detached: Option<&mut io::Read>,
     output: &mut io::Write,
     signatures: usize,
     tpks: Vec<TPK>,

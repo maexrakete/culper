@@ -52,7 +52,7 @@ struct AppState {
     admin_store: AdminService,
 }
 
-/// ADmin registration request
+/// Admin registration request
 #[derive(Serialize, Deserialize)]
 struct AdminRegisterRequest {
     name: String,

@@ -36,12 +36,19 @@ use culper_lib::vault::{OpenableVault, SealableVault};
 use clap::ArgMatches;
 use failure::Error;
 use sequoia::core::Context;
+use sequoia::openpgp::armor::{Kind, Writer};
 use sequoia::openpgp::parse::Parse;
 use sequoia::openpgp::serialize::Serialize;
 use sequoia::openpgp::{armor, TPK};
 use sequoia::store::{LogIter, Store};
 use std::path::PathBuf;
 use url::Url;
+
+#[derive(Serialize, Deserialize)]
+struct RegisterAdminRequest {
+    name: String,
+    key: String,
+}
 
 lazy_static! {
     static ref matches: ArgMatches<'static> = culper_cli::build().get_matches();
@@ -215,11 +222,21 @@ fn real_main() -> Result<(), failure::Error> {
             config_reader.clone().update(new_config).write()?;
         }
         ("encrypt", Some(m)) => {
-            let mut recipients: Vec<&sequoia::openpgp::TPK> = vec![];
+            let mut recipients: Vec<sequoia::openpgp::TPK> = vec![];
             let target_store = Store::open(&ctx, "targets").context("Failed to open the store")?;
             let admin_store = Store::open(&ctx, "admins").context("Failed to open the store")?;
-            recipients.extend(target_store.iter()?.collect());
-            recipients.extend(admin_store.iter()?.collect());
+
+            let targets: Result<Vec<_>, _> = target_store
+                .iter()?
+                .map(|(_, _, binding)| binding.tpk())
+                .collect();
+            let admins: Result<Vec<_>, _> = admin_store
+                .iter()?
+                .map(|(_, _, binding)| binding.tpk())
+                .collect();
+
+            recipients.extend(targets?);
+            recipients.extend(admins?);
 
             let mut priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
 
@@ -243,7 +260,7 @@ fn real_main() -> Result<(), failure::Error> {
                 None => Err(format_err!("Could not access secret key")),
             }?;
 
-            let priv_tpk: Vec<&sequoia::openpgp::TPK> = vec![&priv_tpk];
+            let priv_tpk: Vec<sequoia::openpgp::TPK> = vec![priv_tpk];
             recipients.extend(priv_tpk.clone());
 
             eprint!("Enter value to decrypt: ");
@@ -265,6 +282,23 @@ fn real_main() -> Result<(), failure::Error> {
             match m.subcommand() {
                 ("add", Some(m)) => {
                     let url = Url::parse(m.subcommand().0)?;
+                    if let Some(setup_token) = m.value_of("token") {
+                        let mut buffer = vec![];
+
+                        {
+                            let mut w = Writer::new(&mut buffer, Kind::PublicKey, &[])?;
+                            TPK::from_bytes(priv_key.as_bytes())?.serialize(&mut w)?;
+                        }
+
+                        reqwest::Client::new()
+                            .post(&format!("{}/admin", url))
+                            .header("x-setup-token", setup_token)
+                            .json(&RegisterAdminRequest {
+                                name: config_reader.clone().read()?.me.name,
+                                key: String::from_utf8(buffer)?,
+                            })
+                            .send()?;
+                    }
                     let response =
                         reqwest::get(url).and_then(|mut response| Ok(response.text()?))?;
                     let tpk = TPK::from_bytes(response.as_bytes())?;
