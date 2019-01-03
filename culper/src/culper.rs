@@ -33,6 +33,7 @@ use culper_lib::config::{CulperConfig, UserConfig};
 use culper_lib::vault;
 use culper_lib::vault::{OpenableVault, SealableVault, SealedVault};
 
+use base64::encode;
 use clap::ArgMatches;
 use failure::Error;
 use sequoia::core::Context;
@@ -169,7 +170,6 @@ fn real_main() -> Result<(), failure::Error> {
     let ctx = Context::configure("localhost")
         .home(home_dir(matches.value_of("home")))
         .build()?;
-    let store_name = "default";
     match matches.subcommand() {
         ("setup", Some(m)) => {
             let name = m.value_of("name").unwrap();
@@ -262,7 +262,6 @@ fn real_main() -> Result<(), failure::Error> {
 
             let priv_tpk: Vec<sequoia::openpgp::TPK> = vec![priv_tpk];
             recipients.extend(priv_tpk.clone());
-
             eprintln!("Enter value to decrypt");
             let value: String = prompt("");
             let vault =
@@ -303,6 +302,8 @@ fn real_main() -> Result<(), failure::Error> {
 
                 recipients.extend(owner?);
                 recipients.extend(admins?);
+                recipients.extend(vec![priv_tpk.clone()]);
+
                 let data = commands::decrypt(sealed_vault.secret, 1, recipients, vec![priv_tpk])?;
                 Ok(vault::UnsealedVault::new(
                     String::from_utf8(data)?,
@@ -312,15 +313,17 @@ fn real_main() -> Result<(), failure::Error> {
             println!("{}", unsealed_vault.plain_secret);
         }
         (store_arg @ "target", Some(m)) | (store_arg @ "admin", Some(m)) => {
-            let store = Store::open(&ctx, store_arg).context("Failed to open the store")?;
+            let store = Store::open(&ctx, &format!("{}s", store_arg))
+                .context("Failed to open the store")?;
             match m.subcommand() {
                 ("add", Some(m)) => {
                     let url = Url::parse(m.subcommand().0)?;
                     if let Some(setup_token) = if store_arg == "target" {
-                        m.value_of("token")
+                        m.value_of("as_admin")
                     } else {
                         None
                     } {
+                        println!("setting up remote target");
                         let mut buffer = vec![];
 
                         {
@@ -329,11 +332,11 @@ fn real_main() -> Result<(), failure::Error> {
                         }
 
                         reqwest::Client::new()
-                            .post(&format!("{}/admin", url))
-                            .header("x-setup-token", setup_token)
+                            .post(&format!("{}admin", url))
+                            .header("x-setup-key", setup_token)
                             .json(&RegisterAdminRequest {
                                 name: config_reader.clone().read()?.me.name,
-                                key: String::from_utf8(buffer)?,
+                                key: encode(&buffer),
                             })
                             .send()?;
                     }
@@ -349,7 +352,7 @@ fn real_main() -> Result<(), failure::Error> {
                     binding.delete().context("Failed to delete the binding")?;
                 }
                 ("list", Some(_)) => {
-                    list_bindings(&store, "localhost", "targets")?;
+                    list_bindings(&store, "localhost", &format!("{}s", store_arg))?;
                 }
                 _ => unimplemented!(),
             }

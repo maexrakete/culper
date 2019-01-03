@@ -1,4 +1,5 @@
 use failure::ResultExt;
+use log::{error, info, warn};
 use sequoia::openpgp::serialize::Serialize;
 use sequoia::openpgp::TPK;
 use time::now_utc;
@@ -21,11 +22,10 @@ impl AdminService {
     pub fn import(&self, label: &str, tpk: TPK) -> Result<(), failure::Error> {
         let mut blob = vec![];
         tpk.serialize(&mut blob)?;
-
         let last_key_id = self
             .conn
             .execute(
-                "INSERT INTO keys (fingerprint, key, created, update_at) VALUES(?1, ?2, ?3, ?4)",
+                "INSERT INTO keys (fingerprint, key, created, update_at) VALUES($1, $2, $3, $4)",
                 &[
                     &tpk.fingerprint().to_hex(),
                     &blob,
@@ -33,17 +33,26 @@ impl AdminService {
                     &now_utc().to_timespec(),
                 ],
             )
+            .or_else(|err| {
+                error!("Could not insert key into keys: {:?}", err);
+                Err(err)
+            })
             .and_then(|_| Ok(self.conn.last_insert_rowid()))?;
 
-        self.conn.execute(
-            "INSERT INTO bindings (store, label, key, created) VALUES(?1, ?2, ?3, ?4)",
-            &[
-                &self.admin_id,
-                &label,
-                &last_key_id,
-                &now_utc().to_timespec(),
-            ],
-        )?;
+        self.conn
+            .execute(
+                "INSERT INTO bindings (store, label, key, created) VALUES(?1, ?2, ?3, ?4)",
+                &[
+                    &self.admin_id,
+                    &label,
+                    &last_key_id,
+                    &now_utc().to_timespec(),
+                ],
+            )
+            .or_else(|err| {
+                error!("Could not insert binding into bindings: {:?}", err);
+                Err(err)
+            })?;
 
         for (_, key) in tpk.keys() {
             let keyid = key
@@ -60,9 +69,15 @@ impl AdminService {
             match r {
                 Err(rusqlite::Error::SqliteFailure(f, e)) => match f.code {
                     // Already present.
-                    rusqlite::ErrorCode::ConstraintViolation => Ok(()),
+                    rusqlite::ErrorCode::ConstraintViolation => {
+                        warn!("Key {} is already present", keyid);
+                        Ok(())
+                    }
                     // Raise otherwise.
-                    _ => Err(rusqlite::Error::SqliteFailure(f, e)),
+                    _ => {
+                        error!("Unknown error during inserting of subkey.");
+                        Err(rusqlite::Error::SqliteFailure(f, e))
+                    }
                 },
                 Err(e) => Err(e),
                 Ok(_) => Ok(()),

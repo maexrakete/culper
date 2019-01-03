@@ -32,7 +32,7 @@ pub fn build() -> App<'static, 'static> {
                     SubCommand::with_name("add")
                         .setting(AppSettings::AllowExternalSubcommands)
                         .arg(
-                            Arg::with_name("token")
+                            Arg::with_name("as_admin")
                                 .long("as_admin")
                                 .takes_value(true)
                                 .required(false),

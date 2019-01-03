@@ -131,6 +131,13 @@ fn app() -> Result<(), failure::Error> {
         .home(home_dir(matches.value_of("home")))
         .build()?;
     let admin_store = Store::open(&ctx, "admins").context("Failed to open the store")?;
+    info!(
+        "Using {} as key store.",
+        format!(
+            "{}/public-key-store.sqlite",
+            homedir.to_str().expect("Could not get home dir as string.")
+        )
+    );
     let manager = SqliteConnectionManager::file(format!(
         "{}/public-key-store.sqlite",
         homedir.to_str().expect("Could not get home dir as string.")

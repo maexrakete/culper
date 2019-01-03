@@ -24,6 +24,7 @@ struct Helper {
     pass: Pass,
 }
 
+#[derive(Debug)]
 enum Pass {
     UnencryptedKey(usize),
     EncryptedKey(usize),
@@ -154,6 +155,7 @@ impl DecryptionHelper for Helper {
                 }
 
                 Pass::Passwords => {
+                    println!("Check if passworded key is suitable for decrypting.");
                     if skesks.is_empty() {
                         return Err(failure::err_msg("No key to decrypt message"));
                     }
