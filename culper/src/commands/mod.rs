@@ -376,9 +376,7 @@ fn sign_message(
     Ok(())
 }
 
-struct VHelper<'a> {
-    ctx: &'a Context,
-    store: &'a mut store::Store,
+struct VHelper {
     signatures: usize,
     tpks: Option<Vec<TPK>>,
     labels: HashMap<KeyID, String>,
@@ -390,16 +388,9 @@ struct VHelper<'a> {
     bad_checksums: usize,
 }
 
-impl<'a> VHelper<'a> {
-    fn new(
-        ctx: &'a Context,
-        store: &'a mut store::Store,
-        signatures: usize,
-        tpks: Vec<TPK>,
-    ) -> Self {
+impl VHelper {
+    fn new(signatures: usize, tpks: Vec<TPK>) -> Self {
         VHelper {
-            ctx: ctx,
-            store: store,
             signatures: signatures,
             tpks: Some(tpks),
             labels: HashMap::new(),
@@ -438,7 +429,7 @@ impl<'a> VHelper<'a> {
     }
 }
 
-impl<'a> VerificationHelper for VHelper<'a> {
+impl VerificationHelper for VHelper {
     fn get_public_keys(&mut self, ids: &[KeyID]) -> Result<Vec<TPK>> {
         let mut tpks = self.tpks.take().unwrap();
         let seen: HashSet<_> = tpks
@@ -449,40 +440,6 @@ impl<'a> VerificationHelper for VHelper<'a> {
         // Explicitly provided keys are trusted.
         self.trusted = seen.clone();
 
-        // Try to get missing TPKs from the store.
-        for id in ids.iter().filter(|i| !seen.contains(i)) {
-            let _ = self
-                .store
-                .lookup_by_subkeyid(id)
-                .and_then(|binding| {
-                    self.labels.insert(id.clone(), binding.label()?);
-
-                    // Keys from our store are trusted.
-                    self.trusted.insert(id.clone());
-
-                    binding.tpk()
-                })
-                .and_then(|tpk| {
-                    tpks.push(tpk);
-                    Ok(())
-                });
-        }
-
-        // Update seen.
-        let seen = self.trusted.clone();
-
-        // Try to get missing TPKs from the pool.
-        for id in ids.iter().filter(|i| !seen.contains(i)) {
-            let _ = store::Pool::lookup_by_subkeyid(self.ctx, id)
-                .and_then(|key| {
-                    // Keys from the pool are NOT trusted.
-                    key.tpk()
-                })
-                .and_then(|tpk| {
-                    tpks.push(tpk);
-                    Ok(())
-                });
-        }
         Ok(tpks)
     }
 
@@ -560,19 +517,13 @@ impl<'a> VerificationHelper for VHelper<'a> {
 }
 
 pub fn verify(
-    ctx: &Context,
-    store: &mut store::Store,
     input: &mut io::Read,
     output: &mut io::Write,
     signatures: usize,
     tpks: Vec<TPK>,
 ) -> Result<()> {
-    let helper = VHelper::new(ctx, store, signatures, tpks);
-    let mut verifier = if let Some(dsig) = detached {
-        DetachedVerifier::from_reader(dsig, input, helper)?
-    } else {
-        Verifier::from_reader(input, helper)?
-    };
+    let helper = VHelper::new(signatures, tpks);
+    let mut verifier = Verifier::from_reader(input, helper)?;
 
     io::copy(&mut verifier, output).map_err(|e| {
         if e.get_ref().is_some() {

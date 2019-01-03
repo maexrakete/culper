@@ -31,7 +31,7 @@ use std::process::exit;
 use culper_lib::config;
 use culper_lib::config::{CulperConfig, UserConfig};
 use culper_lib::vault;
-use culper_lib::vault::{OpenableVault, SealableVault};
+use culper_lib::vault::{OpenableVault, SealableVault, SealedVault};
 
 use clap::ArgMatches;
 use failure::Error;
@@ -263,7 +263,7 @@ fn real_main() -> Result<(), failure::Error> {
             let priv_tpk: Vec<sequoia::openpgp::TPK> = vec![priv_tpk];
             recipients.extend(priv_tpk.clone());
 
-            eprint!("Enter value to decrypt: ");
+            eprintln!("Enter value to decrypt");
             let value: String = prompt("");
             let vault =
                 vault::UnsealedVault::new(value.to_owned(), vault::EncryptionFormat::GPG_KEY);
@@ -277,12 +277,50 @@ fn real_main() -> Result<(), failure::Error> {
 
             println!("{}", sealed_vault.to_string());
         }
-        ("target", Some(m)) => {
-            let store = Store::open(&ctx, "targets").context("Failed to open the store")?;
+        ("decrypt", Some(m)) => {
+            // read key from stdin
+            let mut secret_bytes = vec![];
+            open_or_stdin(None)?.read_to_end(&mut secret_bytes)?;
+
+            let vault = vault::parse(&String::from_utf8(secret_bytes)?)
+                .context("Stdin is no valid culper vault")?;
+            let unsealed_vault = vault.unseal(&|sealed_vault: SealedVault| {
+                let priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
+
+                let mut recipients: Vec<sequoia::openpgp::TPK> = vec![];
+                let owner_store = Store::open(&ctx, "owner").context("Failed to open the store")?;
+                let admin_store =
+                    Store::open(&ctx, "admins").context("Failed to open the store")?;
+
+                let owner: Result<Vec<_>, _> = owner_store
+                    .iter()?
+                    .map(|(_, _, binding)| binding.tpk())
+                    .collect();
+                let admins: Result<Vec<_>, _> = admin_store
+                    .iter()?
+                    .map(|(_, _, binding)| binding.tpk())
+                    .collect();
+
+                recipients.extend(owner?);
+                recipients.extend(admins?);
+                let data = commands::decrypt(sealed_vault.secret, 1, recipients, vec![priv_tpk])?;
+                Ok(vault::UnsealedVault::new(
+                    String::from_utf8(data)?,
+                    sealed_vault.format,
+                ))
+            })?;
+            println!("{}", unsealed_vault.plain_secret);
+        }
+        (store_arg @ "target", Some(m)) | (store_arg @ "admin", Some(m)) => {
+            let store = Store::open(&ctx, store_arg).context("Failed to open the store")?;
             match m.subcommand() {
                 ("add", Some(m)) => {
                     let url = Url::parse(m.subcommand().0)?;
-                    if let Some(setup_token) = m.value_of("token") {
+                    if let Some(setup_token) = if store_arg == "target" {
+                        m.value_of("token")
+                    } else {
+                        None
+                    } {
                         let mut buffer = vec![];
 
                         {

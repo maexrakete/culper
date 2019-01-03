@@ -2,6 +2,7 @@ use failure::{self, ResultExt};
 use rpassword;
 use std::collections::HashMap;
 use std::io;
+use std::io::Read;
 
 extern crate sequoia;
 use sequoia::core::Context;
@@ -15,13 +16,11 @@ use sequoia::store;
 
 use super::{dump::PacketDumper, VHelper};
 
-struct Helper<'a> {
-    vhelper: VHelper<'a>,
+struct Helper {
+    vhelper: VHelper,
     secret_keys: HashMap<KeyID, Key>,
     key_identities: HashMap<KeyID, Fingerprint>,
     key_hints: HashMap<KeyID, String>,
-    dumper: Option<PacketDumper>,
-    hex: bool,
     pass: Pass,
 }
 
@@ -37,16 +36,8 @@ impl Default for Pass {
     }
 }
 
-impl<'a> Helper<'a> {
-    fn new(
-        ctx: &'a Context,
-        store: &'a mut store::Store,
-        signatures: usize,
-        tpks: Vec<TPK>,
-        secrets: Vec<TPK>,
-        dump: bool,
-        hex: bool,
-    ) -> Self {
+impl Helper {
+    fn new(signatures: usize, tpks: Vec<TPK>, secrets: Vec<TPK>) -> Self {
         let mut keys: HashMap<KeyID, Key> = HashMap::new();
         let mut identities: HashMap<KeyID, Fingerprint> = HashMap::new();
         let mut hints: HashMap<KeyID, String> = HashMap::new();
@@ -84,22 +75,16 @@ impl<'a> Helper<'a> {
         }
 
         Helper {
-            vhelper: VHelper::new(ctx, store, signatures, tpks),
+            vhelper: VHelper::new(signatures, tpks),
             secret_keys: keys,
             key_identities: identities,
             key_hints: hints,
-            dumper: if dump || hex {
-                Some(PacketDumper::new(false))
-            } else {
-                None
-            },
-            hex: hex,
             pass: Pass::default(),
         }
     }
 }
 
-impl<'a> VerificationHelper for Helper<'a> {
+impl VerificationHelper for Helper {
     fn get_public_keys(&mut self, ids: &[KeyID]) -> Result<Vec<TPK>> {
         self.vhelper.get_public_keys(ids)
     }
@@ -108,25 +93,7 @@ impl<'a> VerificationHelper for Helper<'a> {
     }
 }
 
-impl<'a> DecryptionHelper for Helper<'a> {
-    fn mapping(&self) -> bool {
-        self.hex
-    }
-
-    fn inspect(&mut self, pp: &PacketParser) -> Result<()> {
-        if let Some(dumper) = self.dumper.as_mut() {
-            dumper.packet(
-                &mut io::stderr(),
-                pp.recursion_depth() as usize,
-                pp.header().clone(),
-                pp.packet.clone(),
-                pp.map().map(|m| m.clone()),
-                None,
-            )?;
-        }
-        Ok(())
-    }
-
+impl DecryptionHelper for Helper {
     fn get_secret(&mut self, pkesks: &[&PKESK], skesks: &[&SKESK]) -> Result<Option<Secret>> {
         loop {
             self.pass = match self.pass {
@@ -203,35 +170,20 @@ impl<'a> DecryptionHelper for Helper<'a> {
 }
 
 pub fn decrypt(
-    ctx: &Context,
-    store: &mut store::Store,
-    input: &mut io::Read,
-    output: &mut io::Write,
+    input: Vec<u8>,
     signatures: usize,
     tpks: Vec<TPK>,
     secrets: Vec<TPK>,
-    dump: bool,
-    hex: bool,
-) -> Result<()> {
-    let helper = Helper::new(ctx, store, signatures, tpks, secrets, dump, hex);
-    let mut decryptor = Decryptor::from_reader(input, helper).context("Decryption failed")?;
+) -> Result<Vec<u8>> {
+    let mut result_bytes = vec![];
+    let helper = Helper::new(signatures, tpks, secrets);
+    let mut decryptor = Decryptor::from_bytes(&input, helper).context("Decryption failed")?;
 
-    io::copy(&mut decryptor, output)
-        .map_err(|e| {
-            if e.get_ref().is_some() {
-                // Wrapped failure::Error.  Recover it.
-                failure::Error::from_boxed_compat(e.into_inner().unwrap())
-            } else {
-                // Plain io::Error.
-                e.into()
-            }
-        })
-        .context("Decryption failed")?;
-
-    let helper = decryptor.into_helper();
-    if let Some(dumper) = helper.dumper.as_ref() {
-        dumper.flush(&mut io::stderr())?;
+    {
+        decryptor
+            .read_to_end(&mut result_bytes)
+            .context("Failed reading from decryptor")?;
     }
-    helper.vhelper.print_status();
-    return Ok(());
+
+    return Ok(result_bytes);
 }

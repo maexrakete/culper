@@ -15,7 +15,7 @@ impl EncryptionFormat {
     }
     pub fn from_str(value: &str) -> Result<EncryptionFormat, failure::Error> {
         match value {
-            "GPG_PUB_KEY" => Ok(EncryptionFormat::GPG_KEY),
+            "GPG_KEY" => Ok(EncryptionFormat::GPG_KEY),
             _ => Err(format_err!("Unknown encryption format given: {}", value).into()),
         }
     }
@@ -90,7 +90,7 @@ pub fn parse(value: &str) -> Result<SealedVault, failure::Error> {
     let value_list: Vec<&str> = value.split('.').collect();
     match value_list.as_slice() {
         ["CULPER", encryption_format, secret_bytes] => Ok(SealedVault::new(
-            decode(secret_bytes)?,
+            decode(secret_bytes).context("Failed to decode base64 payload")?,
             EncryptionFormat::from_str(&encryption_format.to_string())?,
         )),
         _ => Err(format_err!("Could not parse string into Culper vault.")),

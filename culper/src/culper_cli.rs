@@ -44,6 +44,23 @@ pub fn build() -> App<'static, 'static> {
                 .subcommand(SubCommand::with_name("list")),
         )
         .subcommand(
+            SubCommand::with_name("admin")
+                .subcommand(
+                    SubCommand::with_name("add")
+                        .setting(AppSettings::AllowExternalSubcommands)
+                        .arg(
+                            Arg::with_name("token")
+                                .long("as_admin")
+                                .takes_value(true)
+                                .required(false),
+                        ),
+                )
+                .subcommand(
+                    SubCommand::with_name("remove").setting(AppSettings::AllowExternalSubcommands),
+                )
+                .subcommand(SubCommand::with_name("list")),
+        )
+        .subcommand(
             SubCommand::with_name("encrypt")
                 .display_order(20)
                 .about("Encrypts a message"),
