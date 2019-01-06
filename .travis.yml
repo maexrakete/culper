@@ -10,17 +10,11 @@ services:
 
 jobs:
   include:
-    - name: "run tests"
-      stage: quick build
-      script:
-        - sudo chmod -R 777 .
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
-        - sudo chmod -R 777 .
-
     - name: "test build"
       stage: quick build
       script:
         - sudo chmod -R 777 .
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
         - sudo chmod -R 777 .
 
@@ -28,12 +22,11 @@ jobs:
       stage: release build
       script:
         - sudo chmod -R 777 .
+        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
         - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --release
         - sudo chmod -R 777 .
 
 stages:
-  - run tests
-
   - name: quick build 
     if: branch != release 
     
