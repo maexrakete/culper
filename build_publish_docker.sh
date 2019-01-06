@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e -u -o pipefail
 
+echo "Get version from" https://github.com/maexrakete/culper/releases/download/${TRAVIS_TAG}/culper-server-version
+
 tag=$(curl https://github.com/maexrakete/culper/releases/download/${TRAVIS_TAG}/culper-server-version)
+
 base_image_name=mietzekotze/culper-server
 tagged_image_name=${base_image_name}:${tag}
 
