@@ -158,8 +158,8 @@ mod tests {
 
         config_reader.update(CulperConfig {
             me: UserConfig {
-                email: "overwrite@mail.de".to_owned(),
-                id: "87654321".to_owned(),
+                name: "overwrite@mail.de".to_owned(),
+                fingerprint: "1234 5678 ABCD ETC".to_owned(),
             },
             targets: None,
             owners: None,
