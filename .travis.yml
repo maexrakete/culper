@@ -39,6 +39,7 @@ before_deploy:
   - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d')-$(git log --format=%h -1)}
   - git tag $TRAVIS_TAG 
   - bash release-build.sh 
+  - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-musl-builder cargo build --release
 
 after_deploy:
   - bash build_publish_docker.sh 
