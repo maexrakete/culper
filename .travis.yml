@@ -8,40 +8,11 @@ rust: nightly
 services:
   - docker
 
-jobs:
-  include:
-    - name: "test build"
-      stage: quick build
-      script:
-        - sudo chmod -R 777 .
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo build --verbose
-        - sudo chmod -R 777 .
-
-    - name: "release build"
-      stage: release build
-      script:
-        - sudo chmod -R 777 .
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
-        - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-musl-builder cargo build --release
-        - sudo chmod -R 777 .
-
-stages:
-  - name: quick build 
-    if: branch != release 
-    
-  - name: release build 
-    if: branch = release 
-
-before_deploy:
-  - git config --local user.name "Maex R."
-  - git config --local user.email "max.kiehnscherf@gmail.com"
-  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d')-$(git log --format=%h -1)}
-  - git tag $TRAVIS_TAG 
-  - bash release-build.sh 
-
-after_deploy:
-  - bash build_publish_docker.sh 
+script:
+  - sudo chmod -R 777 .
+  - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-builder cargo test
+  - docker run --rm -it -v "$(pwd)":/home/rust/src mietzekotze/culper-musl-builder cargo build --release
+  - sudo chmod -R 777 .
 
 deploy:
   provider: releases
@@ -54,4 +25,4 @@ deploy:
     - "culper-version"
   skip_cleanup: true
   on:
-    branch: release 
+    tags: true 
