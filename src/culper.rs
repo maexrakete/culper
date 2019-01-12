@@ -18,6 +18,8 @@ extern crate culper_lib;
 extern crate sequoia;
 extern crate serde_yaml;
 extern crate toml;
+#[macro_use]
+extern crate self_update;
 
 use failure::ResultExt;
 use prettytable::{Cell, Row, Table};
@@ -40,7 +42,7 @@ use sequoia::core::Context;
 use sequoia::openpgp::armor::{Kind, Writer};
 use sequoia::openpgp::parse::Parse;
 use sequoia::openpgp::serialize::Serialize;
-use sequoia::openpgp::{armor, TPK};
+use sequoia::openpgp::TPK;
 use sequoia::store::{LogIter, Store};
 use std::path::PathBuf;
 use url::Url;
@@ -171,6 +173,59 @@ fn real_main() -> Result<(), failure::Error> {
         .home(home_dir(matches.value_of("home")))
         .build()?;
     match matches.subcommand() {
+        ("self-update", Some(m)) => {
+            println!("Your current version: {}", clap::crate_version!());
+
+            let _update_channel = match (m.is_present("alpha"), m.is_present("beta")) {
+                (true, _) => Some("alpha"), // clap ensures that alpha and
+                (_, true) => Some("beta"),  // beta are not present simultaneously
+                (false, false) => None,
+            };
+
+            let releases = self_update::backends::github::ReleaseList::configure()
+                .repo_owner("maexrakete")
+                .repo_name("culper")
+                .build()?
+                .fetch()?;
+
+            let current_version = semver::Version::parse(clap::crate_version!())
+                .expect("The current binaries version can't be parsed.");
+            let latest = releases
+                .iter()
+                .filter(|i| match &semver::Version::parse(&i.tag) {
+                    Ok(version) if version > &current_version => true,
+                    _ => false,
+                })
+                .nth(0);
+
+            match latest {
+                Some(version) => {
+                    println!("Found newer version: {:#?}", version.name);
+                    let tmp_dir =
+                        self_update::TempDir::new_in(::std::env::current_dir()?, "culper_tmp")?;
+                    let tmp_tarball_path = tmp_dir.path().join(&version.assets[0].download_url);
+                    let tmp_tarball = ::std::fs::File::open(&tmp_tarball_path)?;
+
+                    self_update::Download::from_url(&version.assets[0].download_url)
+                        .show_progress(true)
+                        .download_to(&tmp_tarball)?;
+
+                    self_update::Extract::from_source(&tmp_tarball_path)
+                        .archive(self_update::ArchiveKind::Tar(Some(
+                            self_update::Compression::Gz,
+                        )))
+                        .extract_into(&tmp_dir.path())?;
+
+                    let tmp_file = tmp_dir.path().join("culper_new");
+                    let bin_name = "culper";
+                    let bin_path = tmp_dir.path().join(bin_name);
+                    self_update::Move::from_source(&bin_path)
+                        .replace_using_temp(&tmp_file)
+                        .to_dest(&::std::env::current_exe()?)?
+                }
+                None => println!("You're up to date!"),
+            };
+        }
         ("setup", Some(m)) => {
             let name = m.value_of("name").unwrap();
             let priv_key_path_str = priv_key_path(
@@ -426,3 +481,11 @@ fn main() {
 
 mod commands;
 mod culper_cli;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn crate_version_is_parsable() {
+        semver::Version::parse(clap::crate_version!()).expect("Failed to parse crate version.");
+    }
+}

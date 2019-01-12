@@ -1,8 +1,8 @@
-use clap::{App, AppSettings, Arg, ArgGroup, SubCommand};
+use clap::{App, AppSettings, Arg, SubCommand};
 
 pub fn build() -> App<'static, 'static> {
     App::new("culper")
-        .version("0.1.0")
+        .version(clap::crate_version!())
         .about("")
         .setting(AppSettings::ArgRequiredElseHelp)
         .arg(
@@ -59,6 +59,31 @@ pub fn build() -> App<'static, 'static> {
                     SubCommand::with_name("remove").setting(AppSettings::AllowExternalSubcommands),
                 )
                 .subcommand(SubCommand::with_name("list")),
+        )
+        .subcommand(
+            SubCommand::with_name("self-update")
+                .subcommand(
+                    SubCommand::with_name("alpha")
+                        .setting(AppSettings::AllowExternalSubcommands)
+                        .arg(
+                            Arg::with_name("alpha")
+                                .long("alpha")
+                                .conflicts_with("beta")
+                                .takes_value(false)
+                                .required(false),
+                        ),
+                )
+                .subcommand(
+                    SubCommand::with_name("beta")
+                        .setting(AppSettings::AllowExternalSubcommands)
+                        .arg(
+                            Arg::with_name("beta")
+                                .long("beta")
+                                .conflicts_with("alpha")
+                                .takes_value(false)
+                                .required(false),
+                        ),
+                ),
         )
         .subcommand(
             SubCommand::with_name("encrypt")
