@@ -21,8 +21,6 @@ deploy:
   file:
     - "target/x86_64-unknown-linux-musl/release/culper"
     - "target/x86_64-unknown-linux-musl/release/culper-server"
-    - "culper-server-version"
-    - "culper-version"
   skip_cleanup: true
   on:
     tags: true 
