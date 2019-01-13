@@ -1,6 +1,6 @@
 [package]
 name = "culper"
-version = "0.5.2"
+version = "0.5.3-alpha.0"
 authors = ["Mäx <max.kiehnscherf@gmail.com>"]
 description = "secretly store secrets in your yaml"
 edition = "2018"
