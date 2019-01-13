@@ -202,26 +202,19 @@ fn real_main() -> Result<(), failure::Error> {
                 Some(version) => {
                     println!("Found newer version: {:#?}", version.name);
                     let tmp_dir =
-                        self_update::TempDir::new_in(::std::env::current_dir()?, "culper_tmp")?;
-                    let tmp_tarball_path = tmp_dir.path().join(&version.assets[0].download_url);
-                    let tmp_tarball = ::std::fs::File::open(&tmp_tarball_path)?;
+                        self_update::TempDir::new_in(::std::env::current_dir()?, "culper_tmp").context("Creating temp directory failed")?;
+                    let tmp_file = tmp_dir.path().join(&version.assets[0].name);
+
+                    println!("{:#?}", tmp_file);
+                    let tmp_tarball = ::std::fs::File::create(&tmp_file).context("Creating temp file failed")?;
 
                     self_update::Download::from_url(&version.assets[0].download_url)
                         .show_progress(true)
-                        .download_to(&tmp_tarball)?;
+                        .download_to(&tmp_tarball).context("Downloading new version failed")?;
 
-                    self_update::Extract::from_source(&tmp_tarball_path)
-                        .archive(self_update::ArchiveKind::Tar(Some(
-                            self_update::Compression::Gz,
-                        )))
-                        .extract_into(&tmp_dir.path())?;
-
-                    let tmp_file = tmp_dir.path().join("culper_new");
-                    let bin_name = "culper";
-                    let bin_path = tmp_dir.path().join(bin_name);
-                    self_update::Move::from_source(&bin_path)
+                    self_update::Move::from_source(&tmp_file)
                         .replace_using_temp(&tmp_file)
-                        .to_dest(&::std::env::current_exe()?)?
+                        .to_dest(&::std::env::current_exe()?).context("Replacing old version binary failed")?
                 }
                 None => println!("You're up to date!"),
             };
