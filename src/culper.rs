@@ -332,40 +332,47 @@ fn real_main() -> Result<(), failure::Error> {
             println!("{}", sealed_vault.to_string());
         }
         ("decrypt", Some(m)) => {
-            // read key from stdin
-            let mut secret_bytes = vec![];
-            open_or_stdin(None)?.read_to_end(&mut secret_bytes)?;
+            let ifile = m.value_of("file").unwrap(); // clap handles this;
+            let mut yml = load_yml(ifile.to_string())?;
 
-            let vault = vault::parse(&String::from_utf8(secret_bytes)?)
-                .context("Stdin is no valid culper vault")?;
-            let unsealed_vault = vault.unseal(&|sealed_vault: SealedVault| {
-                let priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
+            let replacefn = |val: &mut String| match vault::parse(val) {
+                Ok(vault) => {
+                    let unsealed_vault = vault.unseal(&|sealed_vault: SealedVault| {
+                        let priv_tpk = TPK::from_bytes(priv_key.as_bytes())?;
 
-                let mut recipients: Vec<sequoia::openpgp::TPK> = vec![];
-                let owner_store = Store::open(&ctx, "owner").context("Failed to open the store")?;
-                let admin_store =
-                    Store::open(&ctx, "admins").context("Failed to open the store")?;
+                        let mut recipients: Vec<sequoia::openpgp::TPK> = vec![];
+                        let owner_store =
+                            Store::open(&ctx, "owner").context("Failed to open the store")?;
+                        let admin_store =
+                            Store::open(&ctx, "admins").context("Failed to open the store")?;
 
-                let owner: Result<Vec<_>, _> = owner_store
-                    .iter()?
-                    .map(|(_, _, binding)| binding.tpk())
-                    .collect();
-                let admins: Result<Vec<_>, _> = admin_store
-                    .iter()?
-                    .map(|(_, _, binding)| binding.tpk())
-                    .collect();
+                        let owner: Result<Vec<_>, _> = owner_store
+                            .iter()?
+                            .map(|(_, _, binding)| binding.tpk())
+                            .collect();
+                        let admins: Result<Vec<_>, _> = admin_store
+                            .iter()?
+                            .map(|(_, _, binding)| binding.tpk())
+                            .collect();
 
-                recipients.extend(owner?);
-                recipients.extend(admins?);
-                recipients.extend(vec![priv_tpk.clone()]);
+                        recipients.extend(owner?);
+                        recipients.extend(admins?);
+                        recipients.extend(vec![priv_tpk.clone()]);
 
-                let data = commands::decrypt(sealed_vault.secret, 1, recipients, vec![priv_tpk])?;
-                Ok(vault::UnsealedVault::new(
-                    String::from_utf8(data)?,
-                    sealed_vault.format,
-                ))
-            })?;
-            println!("{}", unsealed_vault.plain_secret);
+                        let data =
+                            commands::decrypt(sealed_vault.secret, 1, recipients, vec![priv_tpk])?;
+                        Ok(vault::UnsealedVault::new(
+                            String::from_utf8(data)?,
+                            sealed_vault.format,
+                        ))
+                    })?;
+                    Ok(Some(unsealed_vault.plain_secret))
+                }
+                _ => Ok(None),
+            };
+
+            let uncrypted_yml = yaml::traverse_yml(&yml.as_mapping().unwrap(), &replacefn)?;
+            println!("{}", serde_yaml::to_string(&uncrypted_yml)?)
         }
         (store_arg @ "target", Some(m)) | (store_arg @ "admin", Some(m)) => {
             let store = Store::open(&ctx, &format!("{}s", store_arg))
@@ -442,28 +449,15 @@ fn list_bindings(store: &Store, domain: &str, name: &str) -> Result<(), failure:
     Ok(())
 }
 
-fn print_log(iter: LogIter, with_slug: bool) {
-    let mut table = Table::new();
-    table.set_format(*prettytable::format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
-    let mut head = row!["timestamp", "message"];
-    if with_slug {
-        head.insert_cell(1, Cell::new("slug"));
-    }
-    table.set_titles(head);
+fn load_yml(file_path: String) -> Result<serde_yaml::Value, Error> {
+    let mut contents = String::new();
+    let mut file = File::open(file_path)?;
 
-    for entry in iter {
-        let mut row = row![&format_time(&entry.timestamp), &entry.short()];
-        if with_slug {
-            row.insert_cell(1, Cell::new(&entry.slug));
-        }
-        table.add_row(row);
-    }
+    file.read_to_string(&mut contents)
+        .or_else(|_| Err(format_err!("Could not parse result to YAML.")))?;
 
-    table.printstd();
-}
-
-fn format_time(t: &time::Timespec) -> String {
-    time::strftime("%F %H:%M", &time::at(*t)).unwrap() // Only parse errors can happen.
+    serde_yaml::from_str::<serde_yaml::Value>(&contents)
+        .or_else(|_| Err(format_err!("Could not parse result to YAML.")))
 }
 
 fn main() {
@@ -481,6 +475,7 @@ fn main() {
 
 mod commands;
 mod culper_cli;
+mod yaml;
 
 #[cfg(test)]
 mod tests {

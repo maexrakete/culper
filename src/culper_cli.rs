@@ -24,7 +24,13 @@ pub fn build() -> App<'static, 'static> {
         .subcommand(
             SubCommand::with_name("decrypt")
                 .display_order(10)
-                .about("Decrypts a message"),
+                .about("Decrypts a filemessage")
+                .arg(
+                    Arg::with_name("file")
+                        .long("file")
+                        .takes_value(true)
+                        .required(true),
+                ),
         )
         .subcommand(
             SubCommand::with_name("target")
