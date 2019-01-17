@@ -109,8 +109,11 @@ fn home_dir(maybe_home: Option<&str>) -> PathBuf {
     match maybe_home {
         Some(given_home) => path.push(given_home),
         None => match dirs::home_dir() {
-            Some(home) => path.push(home),
-            None => path.push("./.culper"),
+          Some(home) => {
+            path.push(home);
+            path.push(".culper");
+          }
+          None => path.push(".culper"),
         },
     }
     path
@@ -169,9 +172,18 @@ fn help_warning(arg: &str) {
 }
 
 fn real_main() -> Result<(), failure::Error> {
+    if matches.subcommand().0 != "setup" {
+      match config_reader.clone().read() {
+        Ok(_) => Ok(()),
+        Err(_) => Err(format_err!("Could not read config file. Create a config file by running \n\n \
+                                    gpg -a --export-secret-keys <your-key-id> | culper setup --name=<your-name-or-alias>"))
+      }?;
+    }
+
     let ctx = Context::configure("localhost")
         .home(home_dir(matches.value_of("home")))
         .build()?;
+
     match matches.subcommand() {
         ("self-update", Some(m)) => {
             println!("Your current version: {}", clap::crate_version!());
@@ -370,6 +382,7 @@ fn real_main() -> Result<(), failure::Error> {
         (store_arg @ "target", Some(m)) | (store_arg @ "admin", Some(m)) => {
             let store = Store::open(&ctx, &format!("{}s", store_arg))
                 .context("Failed to open the store")?;
+
             match m.subcommand() {
                 ("add", Some(m)) => {
                     let url = Url::parse(m.subcommand().0)?;
@@ -382,15 +395,15 @@ fn real_main() -> Result<(), failure::Error> {
                         let mut buffer = vec![];
 
                         {
-                            let mut w = Writer::new(&mut buffer, Kind::PublicKey, &[])?;
-                            TPK::from_bytes(priv_key.as_bytes())?.serialize(&mut w)?;
+                            let mut w = Writer::new(&mut buffer, Kind::PublicKey, &[]).context("Initializing Writer failed")?;
+                            TPK::from_bytes(priv_key.as_bytes())?.serialize(&mut w).context("Serializing private key into TSK failed")?;
                         }
 
                         reqwest::Client::new()
                             .post(&format!("{}admin", url))
                             .header("x-setup-key", setup_token)
                             .json(&RegisterAdminRequest {
-                                name: config_reader.clone().read()?.me.name,
+                                name: config_reader.clone().read().context("I failed")?.me.name,
                                 key: encode(&buffer),
                             })
                             .send()?;
