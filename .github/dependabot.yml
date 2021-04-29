@@ -1,0 +1,24 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: reqwest
+    versions:
+    - 0.11.0
+    - 0.11.1
+    - 0.11.2
+  - dependency-name: self_update
+    versions:
+    - 0.23.0
+    - 0.24.0
+    - 0.25.0
+  - dependency-name: time
+    versions:
+    - 0.2.25
+  - dependency-name: url
+    versions:
+    - 2.2.0
